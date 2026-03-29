@@ -1,6 +1,4 @@
-#ifndef PCH_H
-#define PCH_H
-
+#pragma once
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
@@ -35,7 +33,6 @@
 
 extern "C" {
 #include <libavcodec/avcodec.h>
-#include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libavformat/version.h>
 #include <libavutil/ffversion.h>
@@ -44,5 +41,3 @@ extern "C" {
 }
 
 // #include <ui.h>
-
-#endif // PCH_H

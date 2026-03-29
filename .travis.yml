@@ -1,5 +1,5 @@
 services:
  - docker
 script:
- - docker build --build-arg FF_VER=3.3.9 -t untrunc .
+ - docker build --build-arg FF_VER=8.0 -t untrunc .
  - docker build -t untrunc .

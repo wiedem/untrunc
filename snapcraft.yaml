@@ -23,7 +23,7 @@ parts:
     plugin: make
     override-build: |
       echo "Running override-build script"
-      make FF_VER=3.3.9
+      make FF_VER=8.0
       strip untrunc
       mkdir -p "$SNAPCRAFT_PART_INSTALL/bin"
       mv untrunc "$SNAPCRAFT_PART_INSTALL/bin"

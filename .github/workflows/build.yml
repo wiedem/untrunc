@@ -1,0 +1,72 @@
+name: Build untrunc
+
+on:
+  workflow_dispatch:
+    inputs:
+      ffmpeg_version:
+        description: 'FFmpeg version to build against'
+        required: false
+        default: '8.1'
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential nasm pkg-config wget xz-utils zlib1g-dev
+
+      - name: Download and build FFmpeg ${{ inputs.ffmpeg_version }}
+        run: make ffmpeg-${{ inputs.ffmpeg_version }}/libavcodec/libavcodec.a FF_VER=${{ inputs.ffmpeg_version }} -j$(nproc)
+
+      - name: Build untrunc (static)
+        run: make FF_VER=${{ inputs.ffmpeg_version }} IS_RELEASE=1 IS_STATIC=1 -j$(nproc)
+
+      - name: Run unit tests
+        run: make FF_VER=${{ inputs.ffmpeg_version }} IS_STATIC=1 check
+
+      - name: Verify binary
+        run: |
+          file untrunc
+          ldd untrunc 2>&1 && echo "WARNING: not statically linked" || echo "OK: statically linked"
+          ls -lh untrunc
+          ./untrunc 2>&1 | head -5 || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: untrunc-linux-x86_64
+          path: untrunc
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: brew install nasm
+
+      - name: Download and build FFmpeg ${{ inputs.ffmpeg_version }}
+        run: make ffmpeg-${{ inputs.ffmpeg_version }}/libavcodec/libavcodec.a FF_VER=${{ inputs.ffmpeg_version }} -j$(sysctl -n hw.ncpu)
+
+      - name: Build untrunc
+        run: make FF_VER=${{ inputs.ffmpeg_version }} IS_RELEASE=1 -j$(sysctl -n hw.ncpu)
+
+      - name: Run unit tests
+        run: make FF_VER=${{ inputs.ffmpeg_version }} check
+
+      - name: Verify binary
+        run: |
+          file untrunc
+          otool -L untrunc || true
+          ls -lh untrunc
+          ./untrunc 2>&1 | head -5 || true
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: untrunc-macos-arm64
+          path: untrunc

@@ -18,7 +18,7 @@ This fork improves the [original](https://github.com/ponchio/untrunc) in the fol
 * generic support for all tracks with fixed-width chunks (e.g. twos/sowt)
 * advanced logging system
 * can stretch/shrink video to match audio duration
-* compatible with new versions of ffmpeg
+* requires FFmpeg 8.1 or later
 * handles invalid atom lengths
 * supports GoPro and Sony XAVC videos
 * many bugs got fixed, actively maintained
@@ -26,7 +26,7 @@ This fork improves the [original](https://github.com/ponchio/untrunc) in the fol
 ## Building
 
 Windows users can download the latest version [here](https://github.com/anthwlock/untrunc/releases/latest).\
-In certain cases a specific version of ffmpeg is needed. Untrunc works great with ffmpeg 3.3.9.
+Untrunc requires FFmpeg 8.1 or later.
 
 #### With system libraries
 
@@ -43,7 +43,7 @@ Just use following commands, make will do the rest for you.
 
 ```shell
 sudo apt-get install yasm wget
-make FF_VER=3.3.9
+make FF_VER=8.1
 sudo cp untrunc /usr/local/bin
 ```
 
@@ -61,7 +61,7 @@ make untrunc-gui
 ```shell
 sudo yum -y install epel-release && sudo yum -y install git gcc-c++ yasm
 git clone --depth 5 https://github.com/anthwlock/untrunc && cd untrunc
-make FF_VER=3.3.9
+make FF_VER=8.1
 sudo cp untrunc /usr/local/bin
 ```
 
@@ -80,7 +80,7 @@ You can use the included Dockerfile to build and execute the package as a contai
 The optional argument 'FF_VER' will be passed to `make`.
 
 ```shell
-# docker build --build-arg FF_VER=3.3.9 -t untrunc .
+# docker build --build-arg FF_VER=8.1 -t untrunc .
 docker build -t untrunc .
 docker image prune --filter label=stage=intermediate -f
 

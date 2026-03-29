@@ -2,26 +2,10 @@ _DIR   := .build
 FF_VER := shared
 _EXE   := untrunc
 IS_RELEASE := 0
+IS_STATIC := 0
 LIBUI_STATIC := 0
 
-# make switching between ffmpeg versions easy
 TARGET := $(firstword $(MAKECMDGOALS))
-ifeq ($(TARGET), $(_EXE)-33)
-	FF_VER := 3.3.9
-	EXE := $(TARGET)
-else ifeq ($(TARGET), $(_EXE)-34)
-	FF_VER := 3.4.5
-	EXE := $(TARGET)
-else ifeq ($(TARGET), $(_EXE)-341)
-	FF_VER := 3.4.1
-	EXE := $(TARGET)
-else ifeq ($(TARGET), $(_EXE)-41)
-	FF_VER := 4.1
-	EXE := $(TARGET)
-else ifeq ($(TARGET), $(_EXE)-60)
-	FF_VER := 6.0
-	EXE := $(TARGET)
-endif
 
 ifeq ($(OS),Windows_NT)
 	_OS := Windows
@@ -42,7 +26,11 @@ else
 	#LDFLAGS += -L$(FFDIR)/libswscale/ -lswresample
 	#LDFLAGS += -L$(FFDIR)/libavresample -lavresample
 	#LDFLAGS += -lz -lbz2 -lX11 -lva -lva-drm -lva-x11 -llzma
-	LDFLAGS += -lpthread -ldl
+	ifeq ($(IS_STATIC), 1)
+		LDFLAGS += -static -lpthread -lz -lm
+	else
+		LDFLAGS += -lpthread -ldl
+	endif
 
 	ifeq ($(_OS), Darwin)
 		LDFLAGS += -liconv
@@ -50,6 +38,7 @@ else
 endif
 
 CXXFLAGS += -std=c++17 -D_FILE_OFFSET_BITS=64
+CPPFLAGS += -Isrc
 
 ifeq ($(IS_RELEASE), 1)
 	CXXFLAGS += -O3
@@ -68,7 +57,7 @@ DIR := $(_DIR)_$(FF_VER)
 PCH := src/pch.h
 PCH_OBJ := $(PCH:%=$(DIR)/%.gch)
 PCH_INC := $(PCH_OBJ:%.gch=%)
-SRC := $(wildcard src/*.cpp src/avc1/*.cpp src/hvc1/*.cpp)
+SRC := $(wildcard src/*.cpp src/atom/*.cpp src/codec/*.cpp src/codec/avc1/*.cpp src/codec/hvc1/*.cpp src/core/*.cpp src/io/*.cpp src/track/*.cpp src/util/*.cpp)
 OBJ := $(SRC:%.cpp=$(DIR)/%.o)
 DEP := $(OBJ:.o=.d)
 
@@ -95,19 +84,11 @@ ifeq ($(NJOBS), 0)
 	NJOBS = 1
 endif
 
-ifneq ($(FF_VER), shared)
-	FF_MAJOR_VER := $(word 1, $(subst ., ,$(FF_VER)))
-	ifeq ($(shell test $(FF_MAJOR_VER) -lt 4; echo $$?),0)
-		EXTRA_FF_OPTS := --disable-vda
-	endif
-else
-	EXTRA_FF_OPTS :=
-endif
 
 #$(info $$OBJ is [${OBJ}])
 #$(info $$OBJ_GUI is [${OBJ_GUI}])
 $(shell mkdir -p $(dir $(OBJ_GUI)) 2>/dev/null)
-$(shell mkdir -p $(DIR)/src/avc1 $(DIR)/src/hvc1 2>/dev/null)
+$(shell mkdir -p $(DIR)/src/atom $(DIR)/src/codec/avc1 $(DIR)/src/codec/hvc1 $(DIR)/src/core $(DIR)/src/io $(DIR)/src/track $(DIR)/src/util $(DIR)/tests 2>/dev/null)
 
 CURL := $(shell command -v curl 2>/dev/null)
 
@@ -133,7 +114,7 @@ $(FFDIR)/config.asm: | $(FFDIR)/configure
 	--disable-everything --enable-decoders --disable-vdpau --enable-demuxers --enable-protocol=file \
 	--disable-avdevice --disable-swresample --disable-swscale --disable-avfilter --disable-postproc \
 	--disable-xlib --disable-vaapi --disable-zlib --disable-bzlib --disable-lzma \
-	--disable-audiotoolbox --disable-videotoolbox $(EXTRA_FF_OPTS)
+	--disable-audiotoolbox --disable-videotoolbox
 
 $(FFDIR)/libavcodec/libavcodec.a: | $(FFDIR)/config.asm
 	cat $(FFDIR)/Makefile
@@ -181,4 +162,17 @@ clean:
 	$(RM) -r $(DIR)
 	$(RM) $(EXE)
 	$(RM) $(EXE)-gui
+
+# Unit tests
+TEST_SRCS := $(wildcard tests/*.cpp)
+TEST_OBJS := $(TEST_SRCS:%.cpp=$(DIR)/%.o)
+TEST_LIB_OBJS := $(filter-out $(DIR)/src/main.o, $(OBJ))
+
+$(TEST_OBJS): $(DIR)/tests/%.o: tests/%.cpp
+	$(CXX) $(CPPFLAGS) $(CXXFLAGS) -o $@ -c $<
+
+.PHONY: check
+check: $(TEST_LIB_OBJS) $(TEST_OBJS)
+	$(CXX) $(TEST_OBJS) $(TEST_LIB_OBJS) $(LDFLAGS) -o $(DIR)/test_runner
+	@$(DIR)/test_runner
 

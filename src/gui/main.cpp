@@ -1,4 +1,4 @@
-#include <string.h>  // memset
+#include <string.h> // memset
 #include <iostream>
 
 //#include "libavutil/ffversion.h"
@@ -7,9 +7,8 @@
 
 using namespace std;
 
-int main(int argc, char* argv[]) {
-	g_interactive = false;
-	g_is_gui = true;
+int main(int argc, char *argv[]) {
+	g_options.interactive = false;
 
 	argv_as_utf8(argc, argv);
 

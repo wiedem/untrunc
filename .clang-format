@@ -1,0 +1,40 @@
+BasedOnStyle: LLVM
+
+# Match existing tab-based indentation
+UseTab: ForIndentation
+TabWidth: 4
+IndentWidth: 4
+
+# K&R brace style used throughout the codebase
+BreakBeforeBraces: Attach
+
+# Pointer/reference aligned to variable name (dominant style: `int *ptr`)
+PointerAlignment: Right
+
+# Line length: only 9 lines exceed 120 chars in the entire codebase
+ColumnLimit: 120
+
+# Keep short functions/lambdas on one line where they already are
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortLambdasOnASingleLine: All
+AllowShortIfStatementsOnASingleLine: WithoutElse
+AllowShortLoopsOnASingleLine: false
+
+# Don't sort includes - the existing order has intentional grouping
+SortIncludes: Never
+
+# Don't reflow/reindent comment content (preserves GPL block comment formatting)
+ReflowComments: false
+
+# Keep existing `extern "C" { }` formatting
+IndentExternBlock: NoIndent
+
+# One space before opening brace of control structures
+SpaceBeforeParens: ControlStatements
+
+# No space between template angle brackets
+SpacesInAngles: Never
+
+# Align consecutive assignments and declarations
+AlignConsecutiveAssignments: false
+AlignConsecutiveDeclarations: false

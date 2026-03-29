@@ -1,6 +1,6 @@
 #include "gui.h"
 
-#include <string.h>  // memset
+#include <string.h> // memset
 #include <thread>
 
 extern "C" {
@@ -10,22 +10,25 @@ extern "C" {
 #include "../atom.h"
 #include "../common.h"
 #include "../mp4.h"
+#include "gui_logger.h"
 using namespace std;
 
 stringstream Gui::buffer_ = stringstream();
-uiWindow* Gui::window_;
-uiMultilineEntry* Gui::current_text_entry_;
-uiEntry* Gui::Repair::entry_ok_;
-uiEntry* Gui::Repair::entry_bad_;
-uiMultilineEntry* Gui::Repair::text_entry_;
-uiLabel* Gui::Repair::label_status_;
-uiProgressBar* Gui::Repair::progressbar_;
-uiEntry* Gui::Analyze::entry_ok_;
-uiMultilineEntry* Gui::Analyze::text_entry_;
-uiProgressBar* Gui::Analyze::progressbar_;
-thread* Gui::thread_ = nullptr;
+uiWindow *Gui::window_;
+uiMultilineEntry *Gui::current_text_entry_;
+uiEntry *Gui::Repair::entry_ok_;
+uiEntry *Gui::Repair::entry_bad_;
+uiMultilineEntry *Gui::Repair::text_entry_;
+uiLabel *Gui::Repair::label_status_;
+uiProgressBar *Gui::Repair::progressbar_;
+uiEntry *Gui::Analyze::entry_ok_;
+uiMultilineEntry *Gui::Analyze::text_entry_;
+uiProgressBar *Gui::Analyze::progressbar_;
+unique_ptr<thread> Gui::thread_;
 
 void Gui::init() {
+	installGuiLogger();
+
 	uiInitOptions o;
 	memset(&o, 0, sizeof(uiInitOptions));
 	if (uiInit(&o) != NULL) abort();
@@ -37,14 +40,14 @@ void Gui::init() {
 
 	cout.rdbuf(buffer_.rdbuf());
 	cerr.rdbuf(buffer_.rdbuf());
-	av_log_set_callback([](void* ptr, int loglevel, const char* msg, va_list vl) {
+	av_log_set_callback([](void *ptr, int loglevel, const char *msg, va_list vl) {
 		if (loglevel > av_log_get_level()) return;
 
 		const uint limit = 256;
-		char buffer[limit+1];
-		AVClass *avc = ptr ? *(AVClass**)ptr : NULL;
+		char buffer[limit + 1];
+		AVClass *avc = ptr ? *(AVClass **)ptr : NULL;
 		auto n = snprintf(buffer, limit, "[%s @ %p] ", avc->item_name(ptr), ptr);
-		vsnprintf(buffer+n, limit-n, msg, vl);
+		vsnprintf(buffer + n, limit - n, msg, vl);
 
 		cout << buffer << '\n';
 	});
@@ -62,15 +65,15 @@ void Gui::run() {
 
 void Gui::build() {
 	struct {
-		const char* name;
-		uiControl* (*f)(void);
+		const char *name;
+		uiControl *(*f)(void);
 	} pages[] = {
 	    {"Repair", Gui::repairTab},
 	    {"Settings", Gui::settingsTab},
 	    {"Analyze", Gui::analyzeTab},
 	    {"About", Gui::aboutTab},
 	    {NULL, NULL},
-    };
+	};
 
 	auto tabs = newTab();
 	for (uint i = 0; pages[i].name != NULL; i++)
@@ -79,7 +82,7 @@ void Gui::build() {
 	uiWindowSetChild(window_, uiControl(tabs));
 }
 
-void Gui::openFile(uiButton* b, void* data) {
+void Gui::openFile(uiButton *b, void *data) {
 	auto fn = uiOpenFile(window_);
 	if (fn) {
 		uiEntrySetText(uiEntry(data), fn);
@@ -87,26 +90,26 @@ void Gui::openFile(uiButton* b, void* data) {
 	}
 }
 
-int Gui::onClosing(uiWindow* w, void* data) {
-	if (thread_)  {
+int Gui::onClosing(uiWindow *w, void *data) {
+	if (thread_) {
 		thread_->join();
-		delete(thread_);
+		thread_.reset();
 	}
 	uiQuit();
 	return 1;
 }
 
-int Gui::writeOutput(void* data) {
+int Gui::writeOutput(void *data) {
 	auto txt = uiNewAttributedString(buffer_.str().c_str());
 	if (uiAttributedStringLen(txt)) {
 		uiMultilineEntryAppend(current_text_entry_, uiAttributedStringString(txt));
 		buffer_.str("");
 	}
-//	uiMultilineEntryAppend(current_text_entry_, buffer_.str().c_str());
+	//	uiMultilineEntryAppend(current_text_entry_, buffer_.str().c_str());
 	return 1;
 }
 
-uiEntry* Gui::addFileOpen(uiBox* parent_box, const char* text) {
+uiEntry *Gui::addFileOpen(uiBox *parent_box, const char *text) {
 	auto h_box = newHorizontalBox();
 
 	auto button = newButton(text);
@@ -118,7 +121,7 @@ uiEntry* Gui::addFileOpen(uiBox* parent_box, const char* text) {
 	return entry;
 }
 
-uiControl* Gui::repairTab() {
+uiControl *Gui::repairTab() {
 	auto v_box = newVerticalBox();
 
 	auto h_box1 = newHorizontalBox();
@@ -145,12 +148,14 @@ uiControl* Gui::repairTab() {
 	return uiControl(v_box);
 }
 
-#define CATCH_THEM(R) \
-	catch (const char* e) {cerr << e << '\n'; msgBoxError(e, true); R;} \
-	catch (string e) {cerr << e << '\n'; msgBoxError(e, true); R;} \
-	catch (const std::exception& e) {cerr << e.what() << '\n'; msgBoxError(e.what(), true); R;}
+#define CATCH_THEM(R)                                                                                                  \
+	catch (const std::exception &e) {                                                                                  \
+		cerr << e.what() << '\n';                                                                                      \
+		msgBoxError(e.what(), true);                                                                                   \
+		R;                                                                                                             \
+	}
 
-uiControl* Gui::settingsTab() {
+uiControl *Gui::settingsTab() {
 	auto v_box = newVerticalBox();
 
 	auto group_general = newGroup("general");
@@ -173,7 +178,7 @@ uiControl* Gui::settingsTab() {
 
 	auto h_box_step_size = newHorizontalBox();
 	auto label_step_size = uiNewLabel("       step_size (-st)");
-	auto num_step_size = uiNewSpinbox(1, 1<<16);
+	auto num_step_size = uiNewSpinbox(1, 1 << 16);
 	uiBoxAppend(h_box_step_size, uiControl(label_step_size), 0);
 	uiBoxAppend(h_box_step_size, uiControl(num_step_size), 0);
 
@@ -199,93 +204,108 @@ uiControl* Gui::settingsTab() {
 	uiBoxAppend(v_box, uiControl(group_repair), 0);
 
 	uiComboboxSetSelected(combo_log, 1);
-	uiComboboxOnSelected(combo_log, [](uiCombobox* c_box, void* data){
-		auto v = uiComboboxSelected(c_box);
-		if (v) v++;  // skip LogMode::W
-		g_log_mode = (LogMode)v;
+	uiComboboxOnSelected(
+	    combo_log,
+	    [](uiCombobox *c_box, void *data) {
+		    auto v = uiComboboxSelected(c_box);
+		    if (v) v++; // skip LogMode::W
+		    g_options.log_mode = (LogMode)v;
+	    },
+	    nullptr);
 
-	}, nullptr);
+	uiCheckboxSetChecked(chk_skip, g_options.ignore_unknown);
+	uiCheckboxOnToggled(
+	    chk_skip,
+	    [](uiCheckbox *chk_box, void *spinbox) {
+		    auto v = uiCheckboxChecked(chk_box);
+		    if (v)
+			    uiControlEnable(uiControl(spinbox));
+		    else
+			    uiControlDisable(uiControl(spinbox));
+		    g_options.ignore_unknown = v;
+	    },
+	    num_step_size);
 
-	uiCheckboxSetChecked(chk_skip, g_ignore_unknown);
-	uiCheckboxOnToggled(chk_skip, [](uiCheckbox* chk_box, void* spinbox){
-		auto v = uiCheckboxChecked(chk_box);
-		if (v) uiControlEnable(uiControl(spinbox));
-		else uiControlDisable(uiControl(spinbox));
-		g_ignore_unknown = v;
-
-	}, num_step_size);
-
-	if (!g_ignore_unknown) uiControlDisable(uiControl(num_step_size));
+	if (!g_options.ignore_unknown) uiControlDisable(uiControl(num_step_size));
 	uiSpinboxSetValue(num_step_size, Mp4::step_);
-	uiSpinboxOnChanged(num_step_size, [](uiSpinbox* spinbox, void* data){
-		Mp4::step_ = uiSpinboxValue(spinbox);
-	}, nullptr);
+	uiSpinboxOnChanged(
+	    num_step_size, [](uiSpinbox *spinbox, void *data) { Mp4::step_ = uiSpinboxValue(spinbox); }, nullptr);
 
-	uiCheckboxSetChecked(chk_stretch, g_stretch_video);
-	uiCheckboxOnToggled(chk_stretch, [](uiCheckbox* chk_box, void* data){
-		auto v = uiCheckboxChecked(chk_box);
-		if (v) msgBox("This feature is in beta, so it might not work!");
-		g_stretch_video = v;
+	uiCheckboxSetChecked(chk_stretch, g_options.stretch_video);
+	uiCheckboxOnToggled(
+	    chk_stretch,
+	    [](uiCheckbox *chk_box, void *data) {
+		    auto v = uiCheckboxChecked(chk_box);
+		    if (v) msgBox("This feature is in beta, so it might not work!");
+		    g_options.stretch_video = v;
+	    },
+	    nullptr);
 
-	}, nullptr);
+	uiCheckboxSetChecked(chk_keep_unknown, g_options.dont_exclude);
+	uiCheckboxOnToggled(
+	    chk_keep_unknown,
+	    [](uiCheckbox *chk_box, void *data) {
+		    auto v = uiCheckboxChecked(chk_box);
+		    g_options.dont_exclude = v;
+	    },
+	    nullptr);
 
-	uiCheckboxSetChecked(chk_keep_unknown, g_dont_exclude);
-	uiCheckboxOnToggled(chk_keep_unknown, [](uiCheckbox* chk_box, void* data){
-		auto v = uiCheckboxChecked(chk_box);
-		g_dont_exclude = v;
+	uiCheckboxSetChecked(chk_use_dyn, g_options.use_chunk_stats);
+	uiCheckboxOnToggled(
+	    chk_use_dyn,
+	    [](uiCheckbox *chk_box, void *data) {
+		    auto v = uiCheckboxChecked(chk_box);
+		    g_options.use_chunk_stats = v;
+	    },
+	    nullptr);
 
-	}, nullptr);
+	uiCheckboxSetChecked(chk_rsv_ben, g_options.rsv_ben_mode);
+	uiCheckboxOnToggled(
+	    chk_rsv_ben,
+	    [](uiCheckbox *chk_box, void *data) {
+		    auto v = uiCheckboxChecked(chk_box);
+		    g_options.rsv_ben_mode = v;
+	    },
+	    nullptr);
 
-	uiCheckboxSetChecked(chk_use_dyn, g_use_chunk_stats);
-	uiCheckboxOnToggled(chk_use_dyn, [](uiCheckbox* chk_box, void* data){
-		auto v = uiCheckboxChecked(chk_box);
-		g_use_chunk_stats = v;
-
-	}, nullptr);
-
-	uiCheckboxSetChecked(chk_rsv_ben, g_rsv_ben_mode);
-	uiCheckboxOnToggled(chk_rsv_ben, [](uiCheckbox* chk_box, void* data){
-		auto v = uiCheckboxChecked(chk_box);
-		g_rsv_ben_mode = v;
-
-	}, nullptr);
-
-	string s_max_partsize = to_string(g_max_partsize);
+	string s_max_partsize = to_string(g_options.max_partsize);
 	uiEntrySetText(num_max_partsize, s_max_partsize.c_str());
-	uiEntryOnChanged(num_max_partsize, [](uiEntry *entry, void *data){
-		try {
-			string s = uiEntryText(entry);
-			if (s.empty()) s = "0";
-			parseMaxPartsize(s);
-		}
-		CATCH_THEM(uiEntrySetText(entry, "0"));
-	}, nullptr);
+	uiEntryOnChanged(
+	    num_max_partsize,
+	    [](uiEntry *entry, void *data) {
+		    try {
+			    string s = uiEntryText(entry);
+			    if (s.empty()) s = "0";
+			    parseMaxPartsize(s);
+		    }
+		    CATCH_THEM(uiEntrySetText(entry, "0"));
+	    },
+	    nullptr);
 
 	return uiControl(v_box);
 }
 
-#define defineFileForAnalyze() \
-	current_text_entry_ = Analyze::text_entry_; \
-	uiMultilineEntrySetText(current_text_entry_, ""); \
-	g_onProgress = Gui::Analyze::onProgress; \
-	string file_ok = uiEntryText(Analyze::entry_ok_); \
-	if (file_ok.empty()) { \
-		msgBoxError("Please specify reference file!"); \
-		return; \
-	} \
+#define defineFileForAnalyze()                                                                                         \
+	current_text_entry_ = Analyze::text_entry_;                                                                        \
+	uiMultilineEntrySetText(current_text_entry_, "");                                                                  \
+	g_options.on_progress = Gui::Analyze::onProgress;                                                                  \
+	string file_ok = uiEntryText(Analyze::entry_ok_);                                                                  \
+	if (file_ok.empty()) {                                                                                             \
+		msgBoxError("Please specify reference file!");                                                                 \
+		return;                                                                                                        \
+	}
 
-#define ASYNC(fn, data) uiQueueMain((void (*)(void*))fn, (void*)data)
+#define ASYNC(fn, data) uiQueueMain((void (*)(void *))fn, (void *)data)
 
-#define defineMp4ForAnalyze() \
-	defineFileForAnalyze(); \
-	Mp4 mp4; \
-	try { \
-		g_mp4 = &mp4; \
-		mp4.parseOk(file_ok); \
-	} \
+#define defineMp4ForAnalyze()                                                                                          \
+	defineFileForAnalyze();                                                                                            \
+	Mp4 mp4;                                                                                                           \
+	try {                                                                                                              \
+		mp4.parseOk(file_ok);                                                                                          \
+	}                                                                                                                  \
 	CATCH_THEM(return);
 
-uiControl* Gui::analyzeTab() {
+uiControl *Gui::analyzeTab() {
 	auto v_box = newVerticalBox();
 
 	auto h_box1 = newHorizontalBox();
@@ -309,37 +329,51 @@ uiControl* Gui::analyzeTab() {
 	uiBoxAppend(h_box2, uiControl(b_info), 0);
 	uiBoxAppend(v_box, uiControl(h_box2), 0);
 
-	uiButtonOnClicked(b_dump, [](uiButton* b, void* data){
-		defineMp4ForAnalyze();
-		mp4.dumpSamples();
-	}, NULL);
+	uiButtonOnClicked(
+	    b_dump,
+	    [](uiButton *b, void *data) {
+		    defineMp4ForAnalyze();
+		    mp4.dumpSamples();
+	    },
+	    NULL);
 
-	uiButtonOnClicked(b_analyze, [](uiButton* b, void* data){
-		defineMp4ForAnalyze();
-		mp4.analyze();
-	}, NULL);
+	uiButtonOnClicked(
+	    b_analyze,
+	    [](uiButton *b, void *data) {
+		    defineMp4ForAnalyze();
+		    mp4.analyze();
+	    },
+	    NULL);
 
-	uiButtonOnClicked(b_info, [](uiButton* b, void* data){
-		defineMp4ForAnalyze();
-		mp4.printMediaInfo();
-		cout << "\n\n";
-		mp4.printAtoms();
-	}, NULL);
+	uiButtonOnClicked(
+	    b_info,
+	    [](uiButton *b, void *data) {
+		    defineMp4ForAnalyze();
+		    mp4.printMediaInfo();
+		    cout << "\n\n";
+		    mp4.printAtoms();
+	    },
+	    NULL);
 
-	uiButtonOnClicked(b_atoms, [](uiButton* b, void* data){
-		defineFileForAnalyze();  // for findAtomNames, file_ok can be truncated as well
-		setDisabled(true);
-		Analyze::onProgress(0);
-		thread_ = new thread([](const string& file){
-			try {
-				Atom::findAtomNames(file);
-				Analyze::onProgress(100);
-			}
-			CATCH_THEM();
+	uiButtonOnClicked(
+	    b_atoms,
+	    [](uiButton *b, void *data) {
+		    defineFileForAnalyze(); // for findAtomNames, file_ok can be truncated as well
+		    setDisabled(true);
+		    Analyze::onProgress(0);
+		    thread_ = make_unique<thread>(
+		        [](const string &file) {
+			        try {
+				        Atom::findAtomNames(file);
+				        Analyze::onProgress(100);
+			        }
+			        CATCH_THEM();
 
-			ASYNC(setDisabled, false);
-		}, file_ok);
-	}, NULL);
+			        ASYNC(setDisabled, false);
+		        },
+		        file_ok);
+	    },
+	    NULL);
 
 	Analyze::progressbar_ = uiNewProgressBar();
 	uiBoxAppend(v_box, uiControl(Analyze::progressbar_), 0);
@@ -347,7 +381,7 @@ uiControl* Gui::analyzeTab() {
 	return uiControl(v_box);
 }
 
-uiControl* Gui::aboutTab() {
+uiControl *Gui::aboutTab() {
 	// show version + gh link
 	auto v_box = newVerticalBox();
 
@@ -357,44 +391,42 @@ uiControl* Gui::aboutTab() {
 	uiBoxAppend(v_box, uiControl(text_entry), 1);
 
 	uiMultilineEntryAppend(text_entry, g_version_str.c_str());
-	uiMultilineEntryAppend(text_entry,
-						   "\n\n"
-						   "Report your issues here:\n"
-						   "https://github.com/anthwlock/untrunc"
-						   );
+	uiMultilineEntryAppend(text_entry, "\n\n"
+	                                   "Report your issues here:\n"
+	                                   "https://github.com/anthwlock/untrunc");
 
 	return uiControl(v_box);
 }
 
-void Gui::msgBox(const char* text) {
+void Gui::msgBox(const char *text) {
 	uiMsgBox(window_, "Info", text);
 }
 
-void Gui::msgBoxError(const string& text, bool async) {
+void Gui::msgBoxError(const string &text, bool async) {
 	if (async)
-		ASYNC(msgBoxErrorQueued, new string(text));
+		ASYNC(msgBoxErrorQueued, make_unique<string>(text).release());
 	else
 		msgBoxErrorSync(text);
 }
 
-void Gui::msgBoxErrorSync(const string& text) {
+void Gui::msgBoxErrorSync(const string &text) {
 	auto txt = uiNewAttributedString(text.c_str());
 	uiMsgBox(window_, "Error", uiAttributedStringString(txt));
 	uiFreeAttributedString(txt);
-//	uiMsgBox(window_, "Error", text);
+	//	uiMsgBox(window_, "Error", text);
 }
 
-void Gui::msgBoxErrorQueued(const string* s) {
-	msgBoxErrorSync(*s);
-	delete s;
+void Gui::msgBoxErrorQueued(const string *s) {
+	auto owned = unique_ptr<const string>(s);
+	msgBoxErrorSync(*owned);
 }
 
-void Gui::printToEntry(const char* text) {
+void Gui::printToEntry(const char *text) {
 	writeOutput(nullptr);
 	uiMultilineEntryAppend(current_text_entry_, text);
 }
 
-void Gui::startRepair(uiButton* b, void* data) {
+void Gui::startRepair(uiButton *b, void *data) {
 	current_text_entry_ = Repair::text_entry_;
 	uiMultilineEntrySetText(current_text_entry_, "");
 
@@ -407,34 +439,35 @@ void Gui::startRepair(uiButton* b, void* data) {
 
 	setDisabled(true);
 	Repair::onProgress(0);
-	thread_ = new thread([](const string& file_ok, const string& file_bad){
-		string output_suffix = g_ignore_unknown ? ss("-s", Mp4::step_) : "";
+	thread_ = make_unique<thread>(
+	    [](const string &file_ok, const string &file_bad) {
+		    string output_suffix = g_options.ignore_unknown ? ss("-s", Mp4::step_) : "";
 
-		try {
-			Mp4 mp4;
-			g_mp4 = &mp4;  // singleton is overkill, this is good enough
-			g_onProgress = Gui::Repair::onProgress;
-			mp4.parseOk(file_ok);
+		    try {
+			    Mp4 mp4;
+			    g_options.on_progress = Gui::Repair::onProgress;
+			    mp4.parseOk(file_ok);
 
-			mp4.repair(file_bad);
-			chkHiddenWarnings();
-			Repair::onProgress(100);
-			cout << "\ndone!";
+			    mp4.repair(file_bad);
+			    chkHiddenWarnings();
+			    Repair::onProgress(100);
+			    cout << "\ndone!";
 
-			if (mp4.premature_end_ && mp4.premature_percentage_ < 0.9) {
-				ASYNC(msgBox, "Encountered premature end, please try '-s' in the \"Settings\" Tab.");
-			}
-		}
-		CATCH_THEM();
-		ASYNC(setDisabled, false);
-	}, file_ok, file_bad);
+			    if (mp4.premature_end_ && mp4.premature_percentage_ < 0.9) {
+				    ASYNC(msgBox, "Encountered premature end, please try '-s' in the \"Settings\" Tab.");
+			    }
+		    }
+		    CATCH_THEM();
+		    ASYNC(setDisabled, false);
+	    },
+	    file_ok, file_bad);
 }
 
 void Gui::Repair::onProgress(int percentage) {
 	uiProgressBarSetValue(Repair::progressbar_, percentage);
 }
 
-void Gui::Repair::onStatus(const string& status) {
+void Gui::Repair::onStatus(const string &status) {
 	uiLabelSetText(Repair::label_status_, status.c_str());
 }
 

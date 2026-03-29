@@ -1,0 +1,80 @@
+#pragma once
+#include <memory>
+#include <string>
+#include <vector>
+
+#include "util/common.h"
+
+template <typename T> inline int nb_channels(const T *x) {
+	return x->ch_layout.nb_channels;
+}
+
+struct AVCodecContext;
+struct AVCodecParameters;
+struct AVPacket;
+struct AVFrame;
+
+class Atom;
+class AvcConfig;
+
+struct SampleSizeStats;
+class Track;
+
+class Codec {
+  public:
+	Codec();
+	~Codec();
+	Codec(Codec &&o) noexcept;
+	Codec &operator=(Codec &&o) noexcept;
+	Codec(AVCodecParameters *c);
+	static void initOnce();
+	std::string name_;
+
+	void parseOk(Atom *trak);
+	bool matchSample(const uchar *start);
+	int getSize(const uchar *start, uint maxlength, off_t offset);
+
+	// specific to codec:
+	AVCodecParameters *av_codec_params_;
+	AVCodecContext *av_codec_context_ = nullptr;
+	std::unique_ptr<AvcConfig> avc_config_;
+
+	// info about last frame, codec specific
+	bool was_keyframe_ = false;
+	bool was_bad_ = false;
+	int audio_duration_ = 0;
+	bool should_dump_ = false; // for debug
+	bool chk_for_twos_ = false;
+
+	bool matchSampleStrict(const uchar *start);
+	uint strictness_lvl_ = 0;
+	off_t cur_off_ = 0;
+
+	SampleSizeStats *ss_stats_ = nullptr; // set by onTrackRealloc
+	int track_idx_ = -1;
+	int fdsc_pkt_idx_ = -1; // per-instance counter for fdsc size detection
+	Mp4 *mp4_ = nullptr;    // back-pointer set by Mp4::afterTrackRealloc()
+	Track *getTrack();
+
+	void onTrackRealloc(int track_idx_);
+
+	bool isSupported();
+	// Returns true when the FFmpeg decoder cannot report consumed bytes,
+	// requiring dynamic chunk stats for audio frame boundary detection.
+	bool needsDynStatsForSizing();
+	const uchar *loadAfter(off_t offset);
+
+	static bool looksLikeTwosOrSowt(const uchar *start);
+	static bool twos_is_sowt; // used in looksLikeTwosOrSowt
+
+	// Reusable decode buffers, allocated lazily in getSize for audio/video codecs.
+	AVPacket *decode_packet_ = nullptr;
+	AVFrame *decode_frame_ = nullptr;
+
+  private:
+	bool (*match_fn_)(Codec *, const uchar *start, uint s) = nullptr;
+	bool (*match_strict_fn_)(Codec *, const uchar *start, uint s) = nullptr;
+	int (*get_size_fn_)(Codec *, const uchar *start, uint maxlength) = nullptr;
+
+	void initAVCodec();
+};

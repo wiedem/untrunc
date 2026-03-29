@@ -3,7 +3,9 @@ image: Visual Studio 2019
 
 environment:
   APPVEYOR: 1
-  _FF_VER: 3.3.4
+  # TODO: Zeranoe builds are archived and only available up to FFmpeg 4.x.
+  # Windows builds need to be migrated to a current source (e.g. BtbN/FFmpeg-Builds).
+  _FF_VER: 8.0
 
   matrix:
     - JOB: "32"
