@@ -19,6 +19,7 @@ class FrameInfo {
 	bool should_dump_ = false;
 	uint pad_afterwards_ = 0;
 };
+
 bool operator==(const FrameInfo &lhs, const FrameInfo &rhs);
 bool operator!=(const FrameInfo &lhs, const FrameInfo &rhs);
 std::ostream &operator<<(std::ostream &out, const FrameInfo &fi);

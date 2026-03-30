@@ -208,6 +208,7 @@ string to_utf8(const wchar_t *utf16) {
 	wstring_convert<codecvt_utf8_utf16<wchar_t>, wchar_t> convert;
 	return convert.to_bytes(utf16);
 }
+
 wstring to_utf16(const char *utf8) {
 	wstring_convert<codecvt_utf8_utf16<wchar_t>> converter;
 	return converter.from_bytes(utf8);

@@ -253,6 +253,7 @@ void Mp4::chkDetectionAtImpl(FrameInfo *detectedFramePtr, Mp4::Chunk *detectedCh
 void Mp4::chkFrameDetectionAt(FrameInfo &detected, off_t off) {
 	chkDetectionAtImpl(&detected, nullptr, off);
 }
+
 void Mp4::chkChunkDetectionAt(Mp4::Chunk &detected, off_t off) {
 	chkDetectionAtImpl(nullptr, &detected, off);
 }

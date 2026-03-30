@@ -88,10 +88,12 @@ class Track : public HasHeaderAtom {
 	SampleSizeStats ss_stats_;
 
 	int pkt_sz_gcd_ = 1;
+
 	int alignPktLength(int length) {
 		length += (pkt_sz_gcd_ - (length % pkt_sz_gcd_)) % pkt_sz_gcd_;
 		return length;
 	}
+
 	int getSizeWithGcd(size_t idx) { return alignPktLength(getSize(idx)); }
 
 	int pad_after_chunk_ = -1;
@@ -153,7 +155,9 @@ class Track : public HasHeaderAtom {
 	void printDynPatterns(bool show_percentage = false, std::function<size_t(int, int)> transition_count = nullptr,
 	                      std::function<std::string(uint)> get_codec_name = nullptr);
 	void genLikely();
+
 	bool isSupported() { return codec_.isSupported() || is_tmcd_hardcoded_; }
+
 	bool hasZeroTransitions();
 
 	void genChunkSizes();
@@ -190,8 +194,12 @@ std::ostream &operator<<(std::ostream &out, const Track::Chunk &fi);
 // Both Mp4::Chunk and ChunkIt::Chunk inherit from this to avoid duplicating track_idx_.
 struct IndexedChunk : Track::Chunk {
 	IndexedChunk() = default;
+
 	IndexedChunk(off_t off, int64_t size, int ns, int track_idx) : Track::Chunk(off, size, ns), track_idx_(track_idx) {}
+
 	IndexedChunk(Track::Chunk base, int track_idx) : Track::Chunk(base), track_idx_(track_idx) {}
+
 	explicit operator bool() const { return track_idx_ >= 0; }
+
 	int track_idx_ = -1;
 };

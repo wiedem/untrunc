@@ -19,7 +19,9 @@ void listm(const string &filename) {
 		off_t atom_start_;
 		off_t min_off_ = numeric_limits<off_t>::max(), max_off_ = -1;
 		int n_tracks = 0;
+
 		MoovStats(off_t start) : atom_start_(start) {}
+
 		explicit operator bool() { return n_tracks > 0; }
 	};
 

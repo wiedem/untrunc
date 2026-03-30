@@ -45,6 +45,7 @@ class FileRead {
 	void seekSafe(off_t p);
 	off_t pos();
 	bool atEnd();
+
 	off_t length() { return size_; }
 
 	size_t readBuffer(uchar *target, size_t size, size_t n);

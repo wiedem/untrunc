@@ -24,6 +24,7 @@ typedef struct FFCodec {
 	int (*update_thread_context_for_user)(struct AVCodecContext *dst, const struct AVCodecContext *src);
 	const FFCodecDefault *defaults;
 	int (*init)(struct AVCodecContext *);
+
 	union {
 		int (*decode)(struct AVCodecContext *avctx, struct AVFrame *frame, int *got_frame_ptr, struct AVPacket *avpkt);
 		int (*decode_sub)(struct AVCodecContext *avctx, struct AVSubtitle *sub, int *got_frame_ptr,

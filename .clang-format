@@ -38,3 +38,6 @@ SpacesInAngles: Never
 # Align consecutive assignments and declarations
 AlignConsecutiveAssignments: false
 AlignConsecutiveDeclarations: false
+
+# Enforce blank lines between top-level definition blocks (functions, structs, etc.)
+SeparateDefinitionBlocks: Always

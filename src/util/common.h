@@ -19,12 +19,15 @@ using offs_t = std::vector<off_t>;
 template <typename T> inline unsigned int to_uint(T a) {
 	return static_cast<unsigned int>(a);
 }
+
 template <typename T> inline size_t to_size_t(T a) {
 	return static_cast<size_t>(a);
 }
+
 template <typename T> inline int64_t to_int64(T a) {
 	return static_cast<int64_t>(a);
 }
+
 template <typename T> inline uint64_t to_uint64(T a) {
 	return static_cast<uint64_t>(a);
 }

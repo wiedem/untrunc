@@ -83,6 +83,7 @@ int Mp4::skipNextZeroCave(off_t off, int max_sz, int n_zeros) {
 				if (!isAllZerosAt(pos, 1)) return pos - off;
 	return -1;
 }
+
 Mp4::Chunk Mp4::fitChunk(off_t offset, uint track_idx_to_fit, uint known_n_samples) {
 	Mp4::Chunk c;
 	auto &t = tracks_[track_idx_to_fit];
@@ -368,6 +369,7 @@ int Mp4::getChunkPadding(off_t &offset) {
 
 	return 0;
 }
+
 bool Mp4::currentChunkFinished(int add_extra) {
 	if (ctx_.order_.next_chunk_idx_ == 0) return true;
 	auto [cur_track_idx, expected_ns] =

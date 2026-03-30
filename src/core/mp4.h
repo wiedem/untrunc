@@ -48,6 +48,7 @@ struct WouldMatchCfg {
 	int last_track_idx = -1;
 	bool very_first = false;
 };
+
 typedef WouldMatchCfg WMCfg;
 
 inline std::ostream &operator<<(std::ostream &out, const WouldMatchCfg &cfg) {
@@ -106,7 +107,9 @@ class Mp4 : public HasHeaderAtom {
 	// Offset helpers
 	off_t toAbsOff(off_t offset);
 	std::string offToStr(off_t offset);
+
 	off_t mdatEnd() const { return ctx_.file_.mdat_->start_ + ctx_.file_.mdat_->length_; }
+
 	int64_t mdatContentSize() const { return ctx_.file_.mdat_->contentSize(); }
 
 	// --- Data ---
@@ -197,7 +200,9 @@ class Mp4 : public HasHeaderAtom {
 
 	// Chunk state queries
 	bool nearEnd(off_t offset) { return offset > (mdatContentSize() - ctx_.order_.cycle_size_); }
+
 	bool amInFreeSequence() { return ctx_.scan_.last_track_idx_ == idx_free_; }
+
 	bool currentChunkFinished(int add_extra = 0);
 	bool currentChunkIsDone();
 	int getChunkPadding(off_t &offset);

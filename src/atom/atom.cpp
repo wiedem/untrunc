@@ -308,6 +308,7 @@ vector<Atom *> Atom::atomsByName(const string &name, bool no_recursive) {
 	}
 	return atoms;
 }
+
 Atom *Atom::atomByName(const string &name, bool no_recursive) {
 	for (auto &child : children_) {
 		if (child->name_ == name) return child.get();

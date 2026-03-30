@@ -72,6 +72,7 @@ void Mp4::parseHealthy() {
 
 	if (g_options.log_mode >= LogMode::I) cout << '\n';
 }
+
 void Mp4::parseOk(const string &filename, bool accept_unhealthy) {
 	filename_ok_ = filename;
 	auto &file = openFile(filename);
@@ -134,6 +135,7 @@ void Mp4::parseOk(const string &filename, bool accept_unhealthy) {
 	else
 		logg(ET, "no 'moov' atom found\n");
 }
+
 void Mp4::parseTracksOk() {
 	Codec::initOnce();
 	auto mdats = root_atom_->atomsByName("mdat", true);
@@ -169,6 +171,7 @@ void Mp4::parseTracksOk() {
 		ctx_.file_.max_part_size_ = g_options.max_partsize;
 	}
 }
+
 void Mp4::chkStretchFactor() {
 	int video = 0, sound = 0;
 	for (Track &track : tracks_) {
@@ -205,11 +208,13 @@ void Mp4::setDuration() {
 		duration_ = max(duration_, track.getDurationInTimescale());
 	}
 }
+
 FileRead &Mp4::openFile(const string &filename) {
 	ctx_.file_.file_ = std::make_unique<FileRead>(filename);
 	if (!ctx_.file_.file_->length()) throw length_error(ss("zero-length file: ", filename));
 	return *ctx_.file_.file_;
 }
+
 void Mp4::checkForBadTracks() {
 	if (ctx_.order_.track_order_.size()) return; // we already checked via `isTrackOrderEnough()`
 	for (auto &t : tracks_) {
@@ -221,6 +226,7 @@ void Mp4::checkForBadTracks() {
 		}
 	}
 }
+
 bool Mp4::findAtom(FileRead &file_read, string atom_name, Atom &atom) {
 	while (atom.name_ != atom_name) {
 		off_t new_pos = Atom::findNextAtomOff(file_read, &atom, true);
@@ -235,6 +241,7 @@ bool Mp4::findAtom(FileRead &file_read, string atom_name, Atom &atom) {
 	}
 	return true;
 }
+
 BufferedAtom *Mp4::mdatFromRange(FileRead &file_read, BufferedAtom &mdat) {
 	mdat.start_ = g_options.range_start - 8;
 	mdat.name_ = "mdat";

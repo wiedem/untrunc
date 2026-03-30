@@ -19,7 +19,9 @@ class Atom {
 	std::vector<std::unique_ptr<Atom>> children_;
 
 	Atom();
+
 	Atom(FileRead &f) { parse(f); }
+
 	Atom(const Atom &other);
 	Atom &operator=(const Atom &other);
 	virtual ~Atom();
@@ -39,6 +41,7 @@ class Atom {
 	void updateLength();
 
 	virtual int64_t contentSize() const { return content_.size(); }
+
 	int64_t contentStart() const { return start_ + header_length_; }
 
 	static bool isParent(const std::string &id);
@@ -59,9 +62,11 @@ class Atom {
 	static off_t findNextAtomOff(FileRead &file, const Atom *start_atom, bool searching_rootlvl = false);
 
 	size_t cursor_off_ = 0; // for "stream like" read/write methods
+
 	void seek(size_t idx) { cursor_off_ = idx; }
 
 	static const off_t kEndAtomStart = -55;
+
 	static Atom mkEndAtom() { return Atom(kEndAtomStart); }
 
   private:
@@ -76,6 +81,7 @@ class BufferedAtom : public Atom {
 	explicit BufferedAtom(FileRead &);
 
 	int64_t contentSize() const override { return file_end_ - contentStart(); }
+
 	const uchar *getFragment(off_t offset, int size);
 
 	const uchar *getFragmentIf(off_t offset, int size) {
@@ -84,7 +90,9 @@ class BufferedAtom : public Atom {
 	}
 
 	uint readInt(off_t offset) override;
+
 	int newHeaderSize() { return needs64bitVersion() ? 16 : 8; }
+
 	bool needs64bitVersion();
 
 	std::vector<std::pair<off_t, uint64_t>> sequences_to_exclude_; // from resulting mdat
@@ -97,6 +105,7 @@ class BufferedAtom : public Atom {
 	}
 
 	void write(FileWrite &file) override { write(file, false); }
+
 	void write(FileWrite &file, bool force_64);
 
 	void updateFileEnd(int64_t file_end);
@@ -106,7 +115,9 @@ class HiddenAtomIt {
   public:
 	FileRead &f_;
 	Atom atom_;
+
 	HiddenAtomIt(FileRead &f) : f_(f) { operator++(); }
+
 	static HiddenAtomIt mkEndIt(FileRead &f) { return HiddenAtomIt(f, true); }
 
 	void operator++() {
@@ -118,7 +129,9 @@ class HiddenAtomIt {
 		f_.seek(off);
 		atom_.parseHeader(f_, true);
 	}
+
 	Atom &operator*() { return atom_; }
+
 	bool operator!=(const HiddenAtomIt &rhs) { return atom_.start_ != rhs.atom_.start_; }
 
   private:
@@ -129,8 +142,11 @@ class HiddenAtomIt {
 class AllAtomsIn {
   public:
 	HiddenAtomIt it_, end_it_;
+
 	AllAtomsIn(FileRead &f) : it_(f), end_it_(HiddenAtomIt::mkEndIt(f)) {}
+
 	HiddenAtomIt &begin() { return it_; }
+
 	HiddenAtomIt &end() { return end_it_; }
 };
 

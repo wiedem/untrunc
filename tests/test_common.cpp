@@ -16,6 +16,7 @@ void test_common() {
 		    {0x12345678, 0x78563412}, {0x00000001, 0x01000000}, {0xFF000000, 0x000000FF},
 		    {0x00000000, 0x00000000}, {0xFFFFFFFF, 0xFFFFFFFF},
 		};
+
 		for (auto &c : cases) {
 			CHECK_EQ(swap32(c.in), c.expected);
 			// Roundtrip: applying twice must yield the original value.
@@ -33,6 +34,7 @@ void test_common() {
 		    {0x0000000000000001ULL, 0x0100000000000000ULL},
 		    {0x0000000000000000ULL, 0x0000000000000000ULL},
 		};
+
 		for (auto &c : cases) {
 			CHECK_EQ(swap64(c.in), c.expected);
 			CHECK_EQ(swap64(swap64(c.in)), c.in);
@@ -51,6 +53,7 @@ void test_common() {
 		    {17, 13, 1},               // coprime
 		    {100, 75, 25}, {1024, 256, 256},
 		};
+
 		for (auto &c : cases)
 			CHECK_EQ(gcd(c.a, c.b), c.expected);
 	}
@@ -68,6 +71,7 @@ void test_common() {
 		    {"file", ".mp4"},          // no extension: fallback
 		    {"/path.to/file", ".mp4"}, // dot in directory, not filename
 		};
+
 		for (auto &c : cases)
 			CHECK_EQ(getMovExtension(c.path), std::string(c.expected));
 	}

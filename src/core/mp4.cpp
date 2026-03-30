@@ -30,6 +30,7 @@ bool operator==(const Mp4::Chunk &a, const Mp4::Chunk &b) {
 	return a.off_ == b.off_ && a.n_samples_ == b.n_samples_ && a.track_idx_ == b.track_idx_ &&
 	       a.sample_size_ == b.sample_size_ && a.size_ == b.size_;
 }
+
 bool operator!=(const Mp4::Chunk &a, const Mp4::Chunk &b) {
 	return !(a == b);
 }

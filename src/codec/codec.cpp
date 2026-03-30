@@ -28,6 +28,7 @@ extern map<string, int (*)(Codec *, const uchar *, uint)> dispatch_get_size;
 
 bool Codec::twos_is_sowt = false;
 Codec::Codec() = default;
+
 Codec::Codec(AVCodecParameters *c) : av_codec_params_(c) {}
 
 Codec::~Codec() {

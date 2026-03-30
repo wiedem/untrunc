@@ -21,6 +21,7 @@
 
 #ifndef ATOM_DEFINITION_H
 #define ATOM_DEFINITION_H
+
 enum {
 	PARENT_ATOM = 0, //container atom
 	SIMPLE_PARENT_ATOM = 1,

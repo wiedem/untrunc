@@ -14,8 +14,11 @@ class ChunkIt {
 	class Chunk : public IndexedChunk {
 	  public:
 		Chunk() = default;
+
 		Chunk(off_t off, int sz, int ns, int track_idx) : IndexedChunk(off, sz, ns, track_idx) {}
+
 		Chunk(Track::Chunk t_chunk, int track_idx) : IndexedChunk(t_chunk, track_idx) {}
+
 		bool should_ignore_ = false;
 	};
 
@@ -23,11 +26,13 @@ class ChunkIt {
 	ChunkIt::Chunk current_;
 
 	ChunkIt(const Mp4 *mp4, bool do_filter, bool exclude_dummy);
+
 	static ChunkIt mkEndIt() { return ChunkIt(true); }
 
 	void operator++();
 
 	ChunkIt::Chunk &operator*() { return current_; }
+
 	bool operator!=(ChunkIt rhs) {
 		return current_.track_idx_ != rhs.current_.track_idx_ || current_.off_ != rhs.current_.off_;
 	}
@@ -43,6 +48,7 @@ class ChunkIt {
 		assertt(is_end_it_);
 		becomeEndIt();
 	}
+
 	void becomeEndIt() { current_ = ChunkIt::Chunk(-1, -1, -1, -1); }
 };
 
@@ -50,8 +56,11 @@ class ChunkIt {
 class AllChunksIn {
   public:
 	ChunkIt it_, end_it_;
+
 	AllChunksIn(Mp4 *mp4, bool do_filter, bool exclude_dummy = true)
 	    : it_(mp4, do_filter, exclude_dummy), end_it_(ChunkIt::mkEndIt()) {}
+
 	ChunkIt begin() { return it_; }
+
 	ChunkIt end() { return end_it_; }
 };

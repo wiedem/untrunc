@@ -90,6 +90,7 @@ void Mp4::makeStreamable(const string &ok, const string &output) {
 
 	saveVideo(output);
 }
+
 void Mp4::saveVideo(const string &filename) {
 	/* we save all atom except:
 	  cslg: would need to be recalculated (from ctts)
@@ -234,6 +235,7 @@ string Mp4::getOutputSuffix() {
 	if (g_options.rsv_ben_mode) output_suffix += "-rsvBen";
 	return output_suffix;
 }
+
 string rewriteDestination(const std::string &dst) {
 	if (!g_options.dst_path.size()) return dst;
 	if (isdir(g_options.dst_path))

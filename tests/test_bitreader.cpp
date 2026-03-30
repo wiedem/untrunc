@@ -74,6 +74,7 @@ void test_bitreader() {
 	    {0x30, 5}, // 00110...
 	    {0x38, 6}, // 00111...
 	};
+
 	for (auto &c : golomb_cases) {
 		uint8_t buf[2] = {c.byte, 0x00};
 		const uchar *p = buf;
