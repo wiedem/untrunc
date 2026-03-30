@@ -8,3 +8,11 @@ libav-*
 build
 *.pro.user
 compile_flags.txt
+
+# Editor / AI tooling
+.claude/
+.vscode/
+.codex/
+
+# Local documentation (not part of the repo)
+docs/
