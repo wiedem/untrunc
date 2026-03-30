@@ -87,7 +87,6 @@ else
 	wget -q --show-progress -O /tmp/$(FFDIR).tar.xz https://www.ffmpeg.org/releases/$(FFDIR).tar.xz
 endif
 	tar xf /tmp/$(FFDIR).tar.xz
-	mv $(FFDIR)/VERSION $(FFDIR)/VERSION.bak
 
 $(FFDIR)/config.asm: | $(FFDIR)/configure
 	@echo "(info) please wait ..."
@@ -96,6 +95,7 @@ $(FFDIR)/config.asm: | $(FFDIR)/configure
 	--disable-avdevice --disable-swresample --disable-swscale --disable-avfilter \
 	--disable-xlib --disable-vaapi --disable-zlib --disable-bzlib --disable-lzma \
 	--disable-audiotoolbox --disable-videotoolbox
+	rm -f $(FFDIR)/VERSION
 
 $(FFDIR)/libavcodec/libavcodec.a: | $(FFDIR)/config.asm
 	cat $(FFDIR)/Makefile
