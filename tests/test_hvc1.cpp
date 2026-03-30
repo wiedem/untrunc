@@ -28,6 +28,31 @@ static void write_nal(uchar *buf, int nal_type, int first_slice_flag = 0) {
 	memset(buf + 7, 0, kDataBytes - 1);
 }
 
+// Write one AVCC-format H265 NAL unit with a variable-size length prefix (lsz = 1, 2, or 4).
+static int nal_size_lsz(int lsz) {
+	return lsz + kNalPayload;
+}
+
+static void write_nal_lsz(uchar *buf, int lsz, int nal_type, int first_slice_flag = 0) {
+	switch (lsz) {
+	case 1:
+		buf[0] = (uchar)kNalPayload;
+		break;
+	case 2:
+		buf[0] = 0;
+		buf[1] = (uchar)kNalPayload;
+		break;
+	default: // 4
+		buf[0] = 0; buf[1] = 0; buf[2] = 0;
+		buf[3] = (uchar)kNalPayload;
+		break;
+	}
+	buf[lsz]     = (uchar)((nal_type << 1) & 0xfe);
+	buf[lsz + 1] = 0x01; // nuh_temporal_id_plus1 = 1
+	buf[lsz + 2] = first_slice_flag ? 0x80 : 0x00;
+	memset(buf + lsz + 3, 0, kDataBytes - 1);
+}
+
 // BUG-001: getLengths() in hvc1.cpp overshoots into the next keyframe's inline
 // VPS/SPS/PPS NAL units when no AUD precedes the keyframe.
 //
@@ -65,4 +90,113 @@ void test_hvc1() {
 	// Without the fix: r.length == 4 * kNalSize (TRAIL_R + VPS + SPS + PPS).
 	// With the fix:    r.length == kNalSize      (TRAIL_R only).
 	CHECK_EQ(r.length, kNalSize);
+
+	// AUD as access-unit separator: [TRAIL_R][AUD][IDR] -> stops after TRAIL_R.
+	// When AUD arrives and a previous slice was already seen (previous_nal.is_ok=true),
+	// it signals the end of the current access unit.
+	{
+		uchar buf2[3 * kNalSize];
+		write_nal(buf2 + 0 * kNalSize, /*TRAIL_R*/ 1, /*first_slice_flag=*/1);
+		write_nal(buf2 + 1 * kNalSize, /*AUD*/ 35);
+		write_nal(buf2 + 2 * kNalSize, /*IDR*/ 19, /*first_slice_flag=*/1);
+
+		SampleSizeStats stats2;
+		bool was_kf2 = false;
+		auto la2 = [&](off_t o) -> const uchar * { return buf2 + o; };
+		auto r2 = hvc1GetLengths(buf2, sizeof(buf2), &stats2, was_kf2, la2);
+		CHECK_EQ(r2.length, kNalSize); // stops after TRAIL_R
+	}
+
+	// AUD as first NAL of access unit: [AUD][IDR] -> both included in the same chunk.
+	// AUD is skipped without stopping when no prior slice has been seen.
+	{
+		uchar buf3[2 * kNalSize];
+		write_nal(buf3 + 0 * kNalSize, /*AUD*/ 35);
+		write_nal(buf3 + 1 * kNalSize, /*IDR*/ 19, /*first_slice_flag=*/1);
+
+		SampleSizeStats stats3;
+		bool was_kf3 = false;
+		auto la3 = [&](off_t o) -> const uchar * { return buf3 + o; };
+		auto r3 = hvc1GetLengths(buf3, sizeof(buf3), &stats3, was_kf3, la3);
+		CHECK_EQ(r3.length, 2 * kNalSize); // AUD + IDR both in same chunk
+		CHECK(was_kf3);
+	}
+
+	// Forbidden bit on first NAL: parseNal returns is_ok=false -> length=0.
+	{
+		uchar buf4[kNalSize];
+		write_nal(buf4, /*TRAIL_R*/ 1, /*first_slice_flag=*/1);
+		buf4[4] |= 0x80; // set forbidden_zero_bit in NAL header byte 0
+
+		SampleSizeStats stats4;
+		bool was_kf4 = false;
+		auto la4 = [&](off_t o) -> const uchar * { return buf4 + o; };
+		auto r4 = hvc1GetLengths(buf4, sizeof(buf4), &stats4, was_kf4, la4);
+		CHECK_EQ(r4.length, 0);
+	}
+
+	// Forbidden bit on second NAL: stops after the first valid NAL.
+	{
+		uchar buf5[2 * kNalSize];
+		write_nal(buf5 + 0 * kNalSize, /*TRAIL_R*/ 1, /*first_slice_flag=*/1);
+		write_nal(buf5 + 1 * kNalSize, /*TRAIL_R*/ 1, /*first_slice_flag=*/0);
+		buf5[kNalSize + 4] |= 0x80; // set forbidden bit on second NAL
+
+		SampleSizeStats stats5;
+		bool was_kf5 = false;
+		auto la5 = [&](off_t o) -> const uchar * { return buf5 + o; };
+		auto r5 = hvc1GetLengths(buf5, sizeof(buf5), &stats5, was_kf5, la5);
+		CHECK_EQ(r5.length, kNalSize); // stops after first valid NAL
+	}
+
+	// NAL length size 1 and 2: single TRAIL_R parsed correctly.
+	{
+		for (int lsz : {1, 2}) {
+			uchar buf6[kNalSize]; // generously sized
+			write_nal_lsz(buf6, lsz, /*TRAIL_R*/ 1, /*first_slice_flag=*/1);
+
+			SampleSizeStats stats6;
+			bool was_kf6 = false;
+			auto la6 = [&](off_t o) -> const uchar * { return buf6 + o; };
+			auto r6 = hvc1GetLengths(buf6, nal_size_lsz(lsz), &stats6, was_kf6, la6, lsz);
+			CHECK_EQ(r6.length, nal_size_lsz(lsz));
+		}
+	}
+
+	// wouldExceed: stats with upper_bound just above one NAL stops before the second.
+	// exceedsAllowed uses strict >: length+additional > upper_bound.
+	{
+		uchar buf7[2 * kNalSize];
+		write_nal(buf7 + 0 * kNalSize, /*TRAIL_R*/ 1, /*first_slice_flag=*/1);
+		write_nal(buf7 + 1 * kNalSize, /*TRAIL_R*/ 1, /*first_slice_flag=*/0);
+
+		SampleSizeStats stats7;
+		stats7.normal.upper_bound = kNalSize + 1; // 2*kNalSize > kNalSize+1 triggers stop
+
+		bool was_kf7 = false;
+		auto la7 = [&](off_t o) -> const uchar * { return buf7 + o; };
+		auto r7 = hvc1GetLengths(buf7, sizeof(buf7), &stats7, was_kf7, la7);
+		CHECK_EQ(r7.length, kNalSize); // stops before second NAL
+	}
+
+	// isBigEnough: records alternative lengths when lower_bound is reached.
+	// With lower_bound=kNalSize and upper_bound=3*kNalSize, lengths kNalSize and
+	// 2*kNalSize are recorded as alternatives before the final length 3*kNalSize.
+	{
+		uchar buf8[3 * kNalSize];
+		for (int i = 0; i < 3; i++)
+			write_nal(buf8 + i * kNalSize, /*TRAIL_R*/ 1, /*first_slice_flag=*/0);
+
+		SampleSizeStats stats8;
+		stats8.normal.lower_bound = kNalSize;
+		stats8.normal.upper_bound = 3 * kNalSize;
+
+		bool was_kf8 = false;
+		auto la8 = [&](off_t o) -> const uchar * { return buf8 + o; };
+		auto r8 = hvc1GetLengths(buf8, sizeof(buf8), &stats8, was_kf8, la8);
+		CHECK_EQ(r8.length, 3 * kNalSize);
+		CHECK_EQ((int)r8.alternative_lengths.size(), 2);
+		CHECK_EQ(r8.alternative_lengths[0], kNalSize);
+		CHECK_EQ(r8.alternative_lengths[1], 2 * kNalSize);
+	}
 }
