@@ -1,6 +1,4 @@
 // Iterators for walking chunks from all tracks in mdat order.
-// Included at the bottom of mp4.h (after Mp4 is fully defined)
-// so inline bodies can access Mp4 members.
 
 #pragma once
 #include "track/track.h" // Track::Chunk
@@ -22,10 +20,9 @@ class ChunkIt {
 		bool should_ignore_ = false;
 	};
 
-	const Mp4 *mp4_;
 	ChunkIt::Chunk current_;
 
-	ChunkIt(const Mp4 *mp4, bool do_filter, bool exclude_dummy);
+	ChunkIt(const std::vector<Track> &tracks, off_t mdat_end, bool do_filter, bool exclude_dummy);
 
 	static ChunkIt mkEndIt() { return ChunkIt(true); }
 
@@ -38,13 +35,14 @@ class ChunkIt {
 	}
 
   private:
+	const std::vector<Track> *tracks_; // nullptr for end iterator
 	off_t mdat_end_;
 	int bad_tmcd_idx_ = -1;
 	size_t next_chunk_idx_ = -1;
 	std::vector<uint> cur_next_chunk_idx_;
 	bool do_filter_;
 
-	ChunkIt(bool is_end_it_) {
+	ChunkIt(bool is_end_it_) : tracks_(nullptr) {
 		assertt(is_end_it_);
 		becomeEndIt();
 	}
@@ -57,8 +55,8 @@ class AllChunksIn {
   public:
 	ChunkIt it_, end_it_;
 
-	AllChunksIn(Mp4 *mp4, bool do_filter, bool exclude_dummy = true)
-	    : it_(mp4, do_filter, exclude_dummy), end_it_(ChunkIt::mkEndIt()) {}
+	AllChunksIn(const std::vector<Track> &tracks, off_t mdat_end, bool do_filter, bool exclude_dummy = true)
+	    : it_(tracks, mdat_end, do_filter, exclude_dummy), end_it_(ChunkIt::mkEndIt()) {}
 
 	ChunkIt begin() { return it_; }
 

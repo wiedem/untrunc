@@ -14,6 +14,7 @@ void test_repairer();
 void test_hvc1();
 void test_track_scanner();
 void test_codec_callbacks();
+void test_dyn_stats_builder();
 
 int main() {
 	test_bitreader();
@@ -26,6 +27,7 @@ int main() {
 	test_hvc1();
 	test_track_scanner();
 	test_codec_callbacks();
+	test_dyn_stats_builder();
 
 	int total = g_tests_passed + g_tests_failed;
 	std::cout << "\n" << g_tests_passed << "/" << total << " tests passed";

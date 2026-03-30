@@ -39,7 +39,6 @@ class AVFormatContext;
 struct AVFormatContextDeleter {
 	void operator()(AVFormatContext *ctx) const;
 };
-struct TrackGcdInfo;
 
 struct WouldMatchCfg {
 	off_t offset;
@@ -58,17 +57,7 @@ inline std::ostream &operator<<(std::ostream &out, const WouldMatchCfg &cfg) {
 	           << cfg.skip << "\", " << "force_strict=" << cfg.force_strict << ", " << "very_first=" << cfg.very_first;
 }
 
-struct FreeSeq {
-	off_t offset; // relative
-	int64_t sz;
-	int prev_track_idx;
-	int64_t last_chunk_sz;
-	std::string codec_name; // for display
-
-	bool operator<(const FreeSeq &other) const { return offset < other.offset; }
-};
-
-std::ostream &operator<<(std::ostream &out, const FreeSeq &x);
+#include "free_seq.h"
 
 class Mp4 : public HasHeaderAtom {
   public:
@@ -219,22 +208,7 @@ class Mp4 : public HasHeaderAtom {
 	// --- Statistics ---
 
 	void genDynStats(bool force_patterns = false);
-	void genChunks();
-	void resetChunkTransitions();
-	void genChunkTransitions();
-	void collectPktGcdInfo(std::map<int, TrackGcdInfo> &track_to_info);
-	void analyzeFree();
-	void genDynPatterns();
-	void genLikelyAll();
 	bool needDynStats();
-	std::vector<FreeSeq> chooseFreeSeqs();
-	bool canSkipFree();
-	void setDummyIsSkippable();
-	bool calcTransitionIsUnclear(int track_idx_a, int track_idx_b);
-	void setHasUnclearTransition();
-
-	buffs_t offsToBuffs(const offs_t &offs, const std::string &load_prefix);
-	patterns_t offsToPatterns(const offs_t &offs, const std::string &load_prefix);
 
 	// --- Scan-loop state mutation ---
 
