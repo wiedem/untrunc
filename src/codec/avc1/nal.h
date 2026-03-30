@@ -23,7 +23,7 @@ enum {
 class NalInfo {
   public:
 	NalInfo() = default;
-	NalInfo(const uchar *start, int max_size);
+	NalInfo(const uchar *start, int max_size, int nal_length_size = 4);
 
 	uint length_ = 0;
 	int ref_idc_ = 0;
@@ -32,5 +32,5 @@ class NalInfo {
 	bool is_ok = false; // did parsing work
 	bool is_forbidden_set_ = false;
 	const uchar *data_ = nullptr;
-	bool parseNal(const uchar *start, uint32_t max_size);
+	bool parseNal(const uchar *start, uint32_t max_size, int nal_length_size);
 };

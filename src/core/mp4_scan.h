@@ -2,6 +2,7 @@
 // These functions inspect raw bytes only and have no side effects.
 
 #pragma once
+#include <cstring>
 #include "util/common.h"
 #include "atom/atom.h" // isValidAtomName, swap32
 
@@ -20,7 +21,9 @@ inline int mdatHeaderSkipSize(const uchar *start) {
 //   - "tmcd" atoms are never skipped: they may appear as normal video payload.
 inline int atomSkipSize(const uchar *start, int64_t remaining) {
 	if (!isValidAtomName(start + 4)) return 0;
-	uint atom_len = swap32(*(const uint *)start);
+	uint atom_len;
+	memcpy(&atom_len, start, sizeof(atom_len));
+	atom_len = swap32(atom_len);
 	if (atom_len == 0 || atom_len >= (1u << 20)) return 0;
 	if ((int64_t)atom_len > remaining) return 0;
 	if (start[4] == 't' && start[5] == 'm' && start[6] == 'c' && start[7] == 'd') return 0;

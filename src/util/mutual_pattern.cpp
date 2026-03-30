@@ -134,7 +134,7 @@ bool operator!=(const MutualPattern &a, const MutualPattern &b) {
 
 patterns_t genRawPatterns(buffs_t &buffs) {
 	patterns_t patterns;
-	auto gen = getRandomGenerator();
+	auto &gen = getRandomGenerator();
 	auto dis = uniform_int_distribution<size_t>(0, buffs.size() - 1);
 	shuffle(buffs.begin(), buffs.end(), gen);
 

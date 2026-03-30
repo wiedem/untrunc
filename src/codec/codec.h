@@ -16,6 +16,7 @@ struct AVFrame;
 
 class Atom;
 class AvcConfig;
+class HvcConfig;
 
 struct SampleSizeStats;
 class Track;
@@ -38,6 +39,7 @@ class Codec {
 	AVCodecParameters *av_codec_params_;
 	AVCodecContext *av_codec_context_ = nullptr;
 	std::unique_ptr<AvcConfig> avc_config_;
+	std::unique_ptr<HvcConfig> hvc_config_;
 
 	// info about last frame, codec specific
 	bool was_keyframe_ = false;

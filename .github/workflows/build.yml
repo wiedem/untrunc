@@ -12,7 +12,7 @@ jobs:
   build-linux:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install build dependencies
         run: |
@@ -36,7 +36,7 @@ jobs:
           ./untrunc 2>&1 | head -5 || true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: untrunc-linux-x86_64
           path: untrunc
@@ -44,7 +44,7 @@ jobs:
   build-macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install build dependencies
         run: brew install nasm
@@ -66,7 +66,7 @@ jobs:
           ./untrunc 2>&1 | head -5 || true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: untrunc-macos-arm64
           path: untrunc

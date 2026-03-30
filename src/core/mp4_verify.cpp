@@ -29,8 +29,8 @@ void Mp4::chkUntrunc(FrameInfo &fi, Codec &c, int i) {
 	cout << "\n(" << i << ") Size: " << fi.length_ << " offset: " << offToStr(offset)
 	     << "  begin: " << mkHexStr(start, 4) << " " << mkHexStr(start + 4, 4);
 	auto end_off = offset + fi.length_ - 4;
-	auto sz = min(to_int64(8), ctx_.current_mdat_->contentSize() - end_off);
-	auto end = ctx_.current_mdat_->getFragment(end_off, sz);
+	auto sz = min(to_int64(8), mdatContentSize() - end_off);
+	auto end = ctx_.file_.mdat_->getFragment(end_off, sz);
 	cout << " end: " << mkHexStr(end, sz) << '\n';
 	start = loadFragment(offset);
 
@@ -46,7 +46,7 @@ void Mp4::chkUntrunc(FrameInfo &fi, Codec &c, int i) {
 				break;
 			}
 		}
-	uint size = c.getSize(start, ctx_.current_maxlength_, offset);
+	uint size = c.getSize(start, ctx_.file_.current_maxlength_, offset);
 	uint duration = c.audio_duration_;
 	//TODO check if duration is working with the stts duration.
 
@@ -79,8 +79,8 @@ void Mp4::chkUntrunc(FrameInfo &fi, Codec &c, int i) {
 }
 
 void Mp4::analyze(bool gen_off_map) {
-	auto &mdat = ctx_.current_mdat_;
-	if (!mdat) findMdat(*ctx_.current_file_);
+	auto &mdat = ctx_.file_.mdat_;
+	if (!mdat) findMdat(*ctx_.file_.file_);
 	assertt(mdat);
 
 	for (uint idx = 0; idx < tracks_.size(); idx++) {
@@ -130,7 +130,7 @@ void Mp4::analyze(bool gen_off_map) {
 }
 
 void Mp4::dumpIdxAndOff(off_t off, int idx) {
-	auto real_off = ctx_.current_mdat_->contentStart() + off;
+	auto real_off = ctx_.file_.mdat_->contentStart() + off;
 	cout << setw(15) << ss("(", idx++, ") ") << setw(12) << ss(hexIf(off), " / ") << setw(8) << hexIf(real_off)
 	     << " : ";
 }
@@ -163,7 +163,7 @@ void Mp4::dumpChunk(const Mp4::Chunk &chunk, int &idx, off_t *expected_off) {
 }
 
 void Mp4::dumpSamples() {
-	auto &mdat = ctx_.current_mdat_;
+	auto &mdat = ctx_.file_.mdat_;
 	if (!mdat) {
 		auto &file = openFile(filename_ok_);
 		findMdat(file);
@@ -229,7 +229,8 @@ void Mp4::chkDetectionAtImpl(FrameInfo *detectedFramePtr, Mp4::Chunk *detectedCh
 		cout << "):\n";
 	};
 
-	cout << "bad detection (at " << offToStr(off) << ", chunk " << ctx_.next_chunk_idx_ << ", pkt " << ctx_.pkt_idx_;
+	cout << "bad detection (at " << offToStr(off) << ", chunk " << ctx_.order_.next_chunk_idx_ << ", pkt "
+	     << ctx_.scan_.pkt_idx_;
 	coutExtraInfo();
 
 	if (detectedFramePtr)

@@ -16,7 +16,7 @@
 
 	Copyright 2010 Federico Ponchio
 
-							*/
+						*/
 
 #pragma once
 #include <vector>
@@ -74,58 +74,52 @@ class Mp4 : public HasHeaderAtom {
 	Mp4() = default;
 	~Mp4();
 
-	void parseOk(const std::string &filename, bool accept_unhealthy = false); // parse the first file
+	// --- Public API ---
 
+	// Parsing
+	void parseOk(const std::string &filename, bool accept_unhealthy = false);
+
+	// Repair & analysis
+	void repair(const std::string &filename);
+	void analyze(bool gen_off_map = false);
+	void analyzeOffset(const std::string &filename, off_t offset);
+	void dumpSamples();
+
+	// Output
 	void printTracks();
 	void printTrackStats();
 	void printAtoms();
 	void printStats();
 	void printMediaInfo();
-
 	void makeStreamable(const std::string &ok, const std::string &output);
 	void saveVideo(const std::string &filename);
+	std::string getPathRepaired(const std::string &ok, const std::string &corrupt);
+	bool alreadyRepaired(const std::string &ok, const std::string &corrupt);
 
-	void dumpSamples();
-	void analyze(bool gen_off_map = false);
-	void repair(const std::string &filename);
-	void repairRsvBen(const std::string &filename);
-
-	bool wouldMatch(const WouldMatchCfg &cfg);
-	bool wouldMatch2(const uchar *start);
-	bool wouldMatchDyn(off_t offset, int last_idx);
-	FrameInfo predictSize(const uchar *start, int track_idx, off_t offset);
-	FrameInfo getMatch(off_t offset, bool force_strict = false);
-	void analyzeOffset(const std::string &filename, off_t offset);
-
+	// Track lookup
 	bool hasCodec(const std::string &codec_name);
 	uint getTrackIdx(const std::string &codec_name);
 	int getTrackIdx2(const std::string &codec_name) const;
 	std::string getCodecName(uint track_idx);
 	Track &getTrack(const std::string &codec_name);
+
+	// Offset helpers
 	off_t toAbsOff(off_t offset);
 	std::string offToStr(off_t offset);
-	// Returns absolute end offset of the current mdat (start + length).
-	// Used by ChunkIt to determine the mdat boundary without direct field access.
-	off_t mdatEnd() const { return ctx_.current_mdat_->start_ + ctx_.current_mdat_->length_; }
-	std::string getPathRepaired(const std::string &ok, const std::string &corrupt);
-	bool alreadyRepaired(const std::string &ok, const std::string &corrupt);
+	off_t mdatEnd() const { return ctx_.file_.mdat_->start_ + ctx_.file_.mdat_->length_; }
+	int64_t mdatContentSize() const { return ctx_.file_.mdat_->contentSize(); }
 
-	static uint64_t step_; // step_size in unknown sequence
+	// --- Data ---
+
+	static uint64_t step_;
 	std::vector<Track> tracks_;
-	//	static const int pat_size_ = 64;
 	static const int pat_size_ = 32;
-	int idx_free_ = kNoFreeTrack; // idx of dummy track
-
-	std::vector<FreeSeq> free_seqs_; // for testing if 'free' is skippable
-	std::vector<FreeSeq> chooseFreeSeqs();
-	bool canSkipFree();
-
+	int idx_free_ = kNoFreeTrack;
+	std::vector<FreeSeq> free_seqs_;
 	bool has_moov_ = false;
-
 	std::string ftyp_;
 	off_t orig_mdat_start_;
 	off_t orig_mdat_end_;
-
 	bool premature_end_ = false;
 	double premature_percentage_ = 0;
 
@@ -137,45 +131,112 @@ class Mp4 : public HasHeaderAtom {
 		int sample_size_ = 0;
 	};
 
-	bool setDuplicateInfo();
-	bool isExpectedTrackIdx(int i);
-	void onFirstChunkFound(int track_idx);
-	void correctChunkIdxSimple(int track_idx);
+	// --- Semi-public (used by Track, Codec, Mp4Tools) ---
 
-	// Note: An backtrack algo across multiple (e.g. track_order.size()) matches would be better than this, since it would work even if currentChunkFinished + we wouldn't have to check upfront
-	int findSizeWithContinuation(off_t off, std::vector<int> sizes);
-
-	// Low-level access used by Track, Codec, and Mp4Tools.
-	// These are not intended as part of the primary public API.
 	const uchar *loadFragment(off_t offset, bool update_cur_maxlen = true);
 	const uchar *getBuffAround(off_t offset, int64_t n);
 	void addUnknownSequence(off_t start, uint64_t length);
+	int findSizeWithContinuation(off_t off, std::vector<int> sizes);
 	int twos_track_idx_ = -1;
 	std::map<std::pair<int, int>, std::vector<off_t>> chunk_transitions_;
 	static BufferedAtom *mdatFromRange(FileRead &file_read, BufferedAtom &mdat);
 	static bool findAtom(FileRead &file_read, std::string atom_name, Atom &atom);
 
   private:
-	std::unique_ptr<Atom> root_atom_;
-	BufferedAtom *findMdat(FileRead &file_read);
-	std::unique_ptr<AVFormatContext, AVFormatContextDeleter> context_;
+	// --- Parsing ---
 
+	std::unique_ptr<Atom> root_atom_;
+	std::unique_ptr<AVFormatContext, AVFormatContextDeleter> context_;
+	std::string filename_ok_;
+	const std::vector<std::string> ignore_duration_ = {"tmcd", "fdsc"};
+
+	FileRead &openFile(const std::string &filename);
+	BufferedAtom *findMdat(FileRead &file_read);
 	void parseHealthy();
 	void parseTracksOk();
 	void chkStretchFactor();
 	void setDuration();
-	void chkUntrunc(FrameInfo &fi, Codec &c, int i);
-	void addFrame(const FrameInfo &frame_info);
-	void addChunk(const Mp4::Chunk &chunk);
+	void checkForBadTracks();
+	void afterTrackRealloc();
+
+	// --- Matching ---
+
+	bool wouldMatch(const WouldMatchCfg &cfg);
+	bool wouldMatchDyn(off_t offset, int last_idx);
+	FrameInfo predictSize(const uchar *start, int track_idx, off_t offset);
+	FrameInfo getMatch(off_t offset, bool force_strict = false);
+	bool shouldBeStrict(off_t off, int track_idx);
+	bool anyPatternMatchesHalf(off_t offset, uint track_idx_to_try);
+
+	// --- Scan navigation ---
 
 	int skipZeros(off_t &offset, const uchar *start);
 	int skipAtomHeaders(off_t offset, const uchar *start);
 	int skipAtoms(off_t offset, const uchar *start);
 	bool advanceOffset(off_t &offset, bool just_simulate = false);
+	void printOffset(off_t offset);
+	int64_t calcStep(off_t offset);
+	bool pointsToZeros(off_t offset);
+	bool isAllZerosAt(off_t offset, int n);
 
+	// --- Chunk prediction ---
+
+	Mp4::Chunk fitChunk(off_t offset, uint track_idx, uint known_n_samples = 0);
+	bool predictChunkViaOrder(off_t offset, Mp4::Chunk &c);
+	bool chunkStartLooksInvalid(off_t offset, const Mp4::Chunk &c);
+	Chunk getChunkPrediction(off_t offset, bool only_perfect_fit = false);
+	int getLikelyNextTrackIdx(int *n_samples = nullptr);
+	int getNextTrackViaDynPatterns(off_t offset);
+	int skipNextZeroCave(off_t off, int max_sz, int n_zeros);
+	int calcFallbackTrackIdx();
+
+	// Chunk state queries
+	bool nearEnd(off_t offset) { return offset > (mdatContentSize() - ctx_.order_.cycle_size_); }
+	bool amInFreeSequence() { return ctx_.scan_.last_track_idx_ == idx_free_; }
+	bool currentChunkFinished(int add_extra = 0);
+	bool currentChunkIsDone();
+	int getChunkPadding(off_t &offset);
+
+	// Chunk ordering
+	void correctChunkIdx(int track_idx);
+	void correctChunkIdxSimple(int track_idx);
+	void onFirstChunkFound(int track_idx);
+	bool isExpectedTrackIdx(int i);
+	bool setDuplicateInfo();
+	bool isTrackOrderEnough();
+	void genTrackOrder();
+
+	// --- Statistics ---
+
+	void genDynStats(bool force_patterns = false);
+	void genChunks();
+	void resetChunkTransitions();
+	void genChunkTransitions();
+	void collectPktGcdInfo(std::map<int, TrackGcdInfo> &track_to_info);
+	void analyzeFree();
+	void genDynPatterns();
+	void genLikelyAll();
+	bool needDynStats();
+	std::vector<FreeSeq> chooseFreeSeqs();
+	bool canSkipFree();
+	void setDummyIsSkippable();
+	bool calcTransitionIsUnclear(int track_idx_a, int track_idx_b);
+	void setHasUnclearTransition();
+
+	buffs_t offsToBuffs(const offs_t &offs, const std::string &load_prefix);
+	patterns_t offsToPatterns(const offs_t &offs, const std::string &load_prefix);
+
+	// --- Scan-loop state mutation ---
+
+	void addFrame(const FrameInfo &frame_info);
+	void addChunk(const Mp4::Chunk &chunk);
 	void setLastTrackIdx(int track_idx);
+	void addToExclude(off_t start, uint64_t length, bool force = false);
+	bool chkUnknownSequenceEnded(off_t offset);
 
-	std::string filename_ok_;
+	// --- Verification ---
+
+	void chkUntrunc(FrameInfo &fi, Codec &c, int i);
 	std::map<off_t, FrameInfo> off_to_frame_;
 	std::map<off_t, Mp4::Chunk> off_to_chunk_;
 	void chkDetectionAtImpl(FrameInfo *detectedFramePtr, Mp4::Chunk *detectedChunkPtr, off_t off);
@@ -187,74 +248,23 @@ class Mp4 : public HasHeaderAtom {
 	void dumpIdxAndOff(off_t off, int idx);
 	std::vector<FrameInfo> to_dump_;
 
-	void genDynStats(bool force_patterns = false);
-	void genChunks();
-	void resetChunkTransitions();
-	void genChunkTransitions();
-	void collectPktGcdInfo(std::map<int, TrackGcdInfo> &track_to_info);
-	void analyzeFree();
-	void genDynPatterns();
-	void genLikelyAll();
-
-	buffs_t offsToBuffs(const offs_t &offs, const std::string &load_prefix);
-	patterns_t offsToPatterns(const offs_t &offs, const std::string &load_prefix);
-
-	bool calcTransitionIsUnclear(int track_idx_a, int track_idx_b);
-	void setHasUnclearTransition();
-
-	bool anyPatternMatchesHalf(off_t offset, uint track_idx_to_try);
-	Mp4::Chunk fitChunk(off_t offset, uint track_idx, uint known_n_samples = 0);
-
-	void addToExclude(off_t start, uint64_t length, bool force = false);
-
-	bool chkUnknownSequenceEnded(off_t offset);
-	int64_t calcStep(off_t offset);
-
-	const std::vector<std::string> ignore_duration_ = {"tmcd", "fdsc"};
-
-	FileRead &openFile(const std::string &filename);
-
-	bool predictChunkViaOrder(off_t offset, Mp4::Chunk &c);
-	bool chunkStartLooksInvalid(off_t offset, const Mp4::Chunk &c);
-	Chunk getChunkPrediction(off_t offset, bool only_perfect_fit = false);
-
-	bool nearEnd(off_t offset);
-	bool amInFreeSequence();
-	bool currentChunkFinished(int add_extra = 0);
-	void afterTrackRealloc();
-	int getNextTrackViaDynPatterns(off_t offset);
-
-	void printOffset(off_t offset);
-
-	bool pointsToZeros(off_t offset);
-	bool isAllZerosAt(off_t offset, int n);
-
-	bool needDynStats();
-	bool shouldBeStrict(off_t off, int track_idx);
-	void checkForBadTracks();
+	// --- Output helpers ---
 
 	std::string getOutputSuffix();
 
-	bool currentChunkIsDone();
-	int getChunkPadding(off_t &offset);
-
-	int getLikelyNextTrackIdx(int *n_samples = nullptr);
-	bool isTrackOrderEnough();
-	void genTrackOrder();
-	void setDummyIsSkippable();
-	void correctChunkIdx(int track_idx);
-
-	int skipNextZeroCave(off_t off, int max_sz, int n_zeros);
-
-	int calcFallbackTrackIdx();
+	// --- Constants ---
 
 	static const int kNoFreeTrack = -2;
+	static const int kMinAvc1FrameLen = 6;
+	static const int kProgressInterval = 2000;
+	static const int kMatchLookaheadBuf = 1024;
+
+	// --- Friends & context ---
 
 	friend class Mp4Repairer;
+	friend class RsvRepairer;
 	RepairContext ctx_;
 };
-
-// ChunkIt and AllChunksIn are defined in chunk_it.h (included below after Mp4).
 
 bool operator==(const Mp4::Chunk &lhs, const Mp4::Chunk &rhs);
 bool operator!=(const Mp4::Chunk &lhs, const Mp4::Chunk &rhs);

@@ -11,6 +11,7 @@ void test_track_order();
 void test_slice_info();
 void test_mp4_scan();
 void test_repairer();
+void test_hvc1();
 
 int main() {
 	test_bitreader();
@@ -20,6 +21,7 @@ int main() {
 	test_slice_info();
 	test_mp4_scan();
 	test_repairer();
+	test_hvc1();
 
 	int total = g_tests_passed + g_tests_failed;
 	std::cout << "\n" << g_tests_passed << "/" << total << " tests passed";

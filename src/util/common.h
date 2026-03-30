@@ -121,7 +121,7 @@ template <template <typename, typename...> class C, class T> C<T> choose100(cons
 	size_t n = 100, k = 10;
 	if (n > in.size()) return in;
 
-	auto gen = getRandomGenerator();
+	auto &gen = getRandomGenerator();
 	std::uniform_int_distribution<size_t> dis(0, std::distance(in.begin(), in.end()) - 1 - k);
 	C<T> out;
 

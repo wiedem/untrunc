@@ -14,10 +14,9 @@ SliceInfo::SliceInfo(const NalInfo &nal_info, const SpsInfo &sps) {
 }
 
 bool SliceInfo::isInNewFrame(const SliceInfo &previous_slice) {
-	//See 7.4.1.2.4 Detection of the first VCL NAL unit of a primary coded picture
-	//for rules on how to group nals into a picture.
+	// H.264 7.4.1.2.4: detection of the first VCL NAL unit of a primary coded picture.
+	// Checks are ordered by frequency of occurrence.
 
-	//check for changes
 	if (previous_slice.frame_num != frame_num) {
 		logg(V, "Different frame number\n");
 		return true;
@@ -26,36 +25,36 @@ bool SliceInfo::isInNewFrame(const SliceInfo &previous_slice) {
 		logg(W, "Different pps_id\n");
 		return true;
 	}
-
-	// different nal type
 	if (previous_slice.idr_pic_flag != idr_pic_flag) {
 		logg(W2, "Different nal type (5, 1)\n");
 		return true;
 	}
 
-	//All these conditions are listed in the docs, but it looks like
-	//it creates invalid packets if respected. Puzzling.
-
+	// field_pic_flag and bottom_field_flag are normative boundary conditions.
+	// They were observed to cause false splits on some real-world files, so they
+	// share the strict_nal_frame_check path below in spirit, but for now are kept
+	// unconditional because the false-split cases were not reproduced recently.
 	if (previous_slice.field_pic_flag != field_pic_flag) {
 		logg(W2, "Different field pic flag\n");
 		return true;
 	}
-
 	if (previous_slice.bottom_pic_flag != bottom_pic_flag && previous_slice.bottom_pic_flag != -1 &&
 	    previous_slice.bottom_pic_flag != -1) {
 		logg(W2, "Different bottom pic flag\n");
 		return true;
 	}
 
-	// TODO: 'poc_lsb' differs OR 'delta_poc_bottom' differs
+	// poc_lsb (poc_type=0): active by default but disabled for Canon CAEP and Sony XAVC
+	// via strict_nal_frame_check=false, because those cameras produce streams where this
+	// check causes false splits between multi-slice frames.
+	// Not implemented: delta_poc_bottom (poc_type=0, field-coded, interlaced-only).
 	if (g_options.strict_nal_frame_check && previous_slice.poc_type == 0 && poc_type == 0 &&
 	    previous_slice.poc_lsb != poc_lsb) {
 		logg(W2, "Different poc lsb\n");
 		return true;
 	}
 
-	// TODO: both 'poc_type' == 1 AND either 'delta_pic_order_cnt[0]' or 'delta_pic_order_cnt[1]' differs
-	//	if(previous_slice.poc_type == 1  && poc_type == 1 && ... )
+	// poc_type=1: delta_pic_order_cnt[0/1] not implemented (extremely rare encoder config).
 
 	if (g_options.strict_nal_frame_check && previous_slice.idr_pic_flag == 1 && idr_pic_flag == 1 &&
 	    previous_slice.idr_pic_id != idr_pic_id) {
@@ -102,11 +101,13 @@ bool SliceInfo::decode(const NalInfo &nal_info, const SpsInfo &sps) {
 		idr_pic_id = readGolomb(start, offset);
 	}
 
-	//if pic order cnt type == 0
+	// poc_lsb is only present in the slice header for poc_type=0.
+	// delta_poc_bottom (poc_type=0, field-coded) and delta_pic_order_cnt (poc_type=1)
+	// are not parsed: interlaced content and poc_type=1 streams are too rare to warrant
+	// the added complexity.
 	if (sps.poc_type == 0) {
 		poc_lsb = readBits(sps.log2_max_poc_lsb, start, offset);
 		logg(VV, "Poc lsb: ", poc_lsb, '\n');
 	}
-	//ignoring the delta_poc for the moment.
 	return true;
 }

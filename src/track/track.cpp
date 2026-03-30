@@ -838,7 +838,12 @@ bool Track::doesMatchTransition(const uchar *buff, int track_idx) {
 		}
 	}
 
-	if (has_unclear_transition_[track_idx] && !mp4_->wouldMatch2(buff + Mp4::pat_size_ / 2)) {
+	auto anyTrackMatches = [&](const uchar *start) {
+		for (auto &t : mp4_->tracks_)
+			if (t.codec_.matchSample(start)) return true;
+		return false;
+	};
+	if (has_unclear_transition_[track_idx] && !anyTrackMatches(buff + Mp4::pat_size_ / 2)) {
 		logg(V, "inverted chunk match: ", codec_.name_, "_", mp4_->getCodecName(track_idx), "\n");
 		return true;
 	}

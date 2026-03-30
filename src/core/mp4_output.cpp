@@ -52,11 +52,11 @@ void Mp4::printTrackStats() {
 }
 
 void Mp4::printStats() {
-	if (g_options.use_chunk_stats && ctx_.first_off_abs_ < 0) genDynStats(true);
+	if (g_options.use_chunk_stats && ctx_.scan_.first_off_abs_ < 0) genDynStats(true);
 	cout << "\nStats:\n";
-	cout << "first_off_: " << ctx_.first_off_abs_ << '\n';
-	cout << "ctx_.first_off_rel_: " << ctx_.first_off_rel_ << '\n';
-	cout << "ctx_.max_part_size_: " << ctx_.max_part_size_ << '\n';
+	cout << "first_off_: " << ctx_.scan_.first_off_abs_ << '\n';
+	cout << "ctx_.scan_.first_off_rel_: " << ctx_.scan_.first_off_rel_ << '\n';
+	cout << "ctx_.file_.max_part_size_: " << ctx_.file_.max_part_size_ << '\n';
 	cout << "\n";
 	printTrackStats();
 }
@@ -64,7 +64,7 @@ void Mp4::printStats() {
 void Mp4::makeStreamable(const string &ok, const string &output) {
 	warnIfAlreadyExists(output);
 	parseOk(ok);
-	if (!ctx_.current_mdat_) findMdat(*ctx_.current_file_);
+	if (!ctx_.file_.mdat_) findMdat(*ctx_.file_.file_);
 
 	auto moov = root_atom_->atomByName("moov");
 	auto mdat = root_atom_->atomByName("mdat");
@@ -74,7 +74,7 @@ void Mp4::makeStreamable(const string &ok, const string &output) {
 	}
 
 	for (auto &t : tracks_) {
-		ctx_.pkt_idx_ += t.sizes_.size();
+		ctx_.scan_.pkt_idx_ += t.sizes_.size();
 		for (auto &c : t.chunks_)
 			c.off_ -= mdat->contentStart();
 	}
@@ -93,7 +93,7 @@ void Mp4::saveVideo(const string &filename) {
 	if (tracks_.back().is_dummy_) tracks_.pop_back();
 
 	if (g_options.log_mode >= I) {
-		cout << "Info: Found " << ctx_.pkt_idx_ << " packets ( ";
+		cout << "Info: Found " << ctx_.scan_.pkt_idx_ << " packets ( ";
 		for (const Track &t : tracks_) {
 			cout << t.codec_.name_ << ": " << t.getNumSamples() << ' ';
 			if (contains({"avc1", "hvc1", "hev1"}, t.codec_.name_) || t.keyframes_.size())
@@ -110,7 +110,7 @@ void Mp4::saveVideo(const string &filename) {
 		if (track.pkt_sz_gcd_ > 1 && g_options.dont_exclude) {
 			track.splitChunks();
 		}
-		track.writeToAtoms(ctx_.broken_is_64_);
+		track.writeToAtoms(ctx_.file_.broken_is_64_);
 
 		auto &cn = track.codec_.name_;
 		if (contains(ignore_duration_, cn)) continue;
@@ -134,28 +134,28 @@ void Mp4::saveVideo(const string &filename) {
 		logg(I, "Duration of ", cn, ": ", s_hour, s_min, s_sec, s_msec, " (", bmsec, " ms)\n");
 	}
 
-	BufferedAtom *mdat = ctx_.current_mdat_.release(); // transfer ownership to root_atom_ via replace()
+	BufferedAtom *mdat = ctx_.file_.mdat_.release(); // transfer ownership to root_atom_ via replace()
 	Atom *original_mdat = root_atom_->atomByName("mdat");
 	root_atom_->replace(original_mdat, mdat); // replace() takes ownership of mdat, deletes original
 	//	Atom *mdat = root_atom_->atomByName("mdat");
 
-	if (ctx_.unknown_lengths_.size()) {
+	if (ctx_.scan_.unknown_lengths_.size()) {
 		cout << setprecision(4);
 		int64_t bytes_not_matched = 0;
-		for (auto n : ctx_.unknown_lengths_)
+		for (auto n : ctx_.scan_.unknown_lengths_)
 			bytes_not_matched += n;
 		double percentage = (double)100 * bytes_not_matched / mdat->contentSize();
-		logg(W, "Unknown sequences: ", ctx_.unknown_lengths_.size(), '\n');
+		logg(W, "Unknown sequences: ", ctx_.scan_.unknown_lengths_.size(), '\n');
 		logg(W, "Bytes NOT matched: ", pretty_bytes(bytes_not_matched), " (", percentage, "%)\n");
 	}
 
-	if (ctx_.atoms_skipped_.size()) {
+	if (ctx_.scan_.atoms_skipped_.size()) {
 		uint64_t sum = 0;
-		for (auto x : ctx_.atoms_skipped_)
+		for (auto x : ctx_.scan_.atoms_skipped_)
 			sum += x;
 
 		auto lvl = sum > 1 * (1 << 20) ? W : V;
-		logg(lvl, "Skipped atoms in mdat: ", ctx_.atoms_skipped_.size(), " -> ", pretty_bytes(sum), " total\n");
+		logg(lvl, "Skipped atoms in mdat: ", ctx_.scan_.atoms_skipped_.size(), " -> ", pretty_bytes(sum), " total\n");
 	}
 
 	if (g_options.dont_write) return;
@@ -202,7 +202,7 @@ void Mp4::saveVideo(const string &filename) {
 
 		filename_ok_ = filename;
 		mdat->start_ = offset - 8; // not mdat->headerSize()
-		ctx_.current_mdat_.reset(mdat);
+		ctx_.file_.mdat_.reset(mdat);
 		dumpSamples();
 		return;
 	}

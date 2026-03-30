@@ -5,7 +5,7 @@
 #include <iomanip>
 
 #include "mp4_repairer.h"
-#include "rsv.h" // isPointingAtRtmdHeader
+#include "rsv.h" // isPointingAtRtmdHeader, RsvRepairer
 
 using namespace std;
 
@@ -13,32 +13,33 @@ Mp4Repairer::Mp4Repairer(Mp4 &mp4) : mp4_(mp4) {}
 
 bool Mp4Repairer::shouldPreferChunkPrediction() {
 	return g_options.use_chunk_stats &&
-	       ((mp4_.ctx_.last_track_idx_ >= 0 && mp4_.tracks_[mp4_.ctx_.last_track_idx_].chunkProbablyAtAnd()) ||
-	        (mp4_.ctx_.last_track_idx_ == -1 && mp4_.ctx_.orig_first_track_->shouldUseChunkPrediction()));
+	       ((mp4_.ctx_.scan_.last_track_idx_ >= 0 &&
+	         mp4_.tracks_[mp4_.ctx_.scan_.last_track_idx_].chunkProbablyAtAnd()) ||
+	        (mp4_.ctx_.scan_.last_track_idx_ == -1 && mp4_.ctx_.scan_.orig_first_track_->shouldUseChunkPrediction()));
 }
 
 void Mp4Repairer::pushBackLastChunk() {
-	if (mp4_.ctx_.last_track_idx_ >= 0) mp4_.tracks_[mp4_.ctx_.last_track_idx_].pushBackLastChunk();
+	if (mp4_.ctx_.scan_.last_track_idx_ >= 0) mp4_.tracks_[mp4_.ctx_.scan_.last_track_idx_].pushBackLastChunk();
 }
 
 void Mp4Repairer::onNewChunkStarted(int new_track_idx) {
-	if (mp4_.ctx_.ignored_chunk_order_) {
+	if (mp4_.ctx_.scan_.ignored_chunk_order_) {
 		dbgg("Ignored chunk order previously, calling correctChunkIdx", new_track_idx,
 		     mp4_.getCodecName(new_track_idx));
 		mp4_.correctChunkIdx(new_track_idx);
-		mp4_.ctx_.ignored_chunk_order_ = false;
+		mp4_.ctx_.scan_.ignored_chunk_order_ = false;
 	}
 
 	pushBackLastChunk();
-	mp4_.ctx_.done_padding_after_ = false;
+	mp4_.ctx_.scan_.done_padding_after_ = false;
 	if (new_track_idx != mp4_.idx_free_) {
-		if (!mp4_.ctx_.first_chunk_found_) mp4_.onFirstChunkFound(new_track_idx);
-		mp4_.ctx_.next_chunk_idx_++;
+		if (!mp4_.ctx_.scan_.first_chunk_found_) mp4_.onFirstChunkFound(new_track_idx);
+		mp4_.ctx_.order_.next_chunk_idx_++;
 	}
 }
 
 void Mp4Repairer::chkExcludeOverlap(off_t &start, int64_t &length) {
-	auto last_end = (long long)mp4_.ctx_.current_mdat_->excludedEndOff();
+	auto last_end = (long long)mp4_.ctx_.file_.mdat_->excludedEndOff();
 	auto already_skipped = std::max(0LL, last_end - start);
 	if (already_skipped) {
 		start = last_end;
@@ -51,7 +52,7 @@ bool Mp4Repairer::chkOffset(off_t &offset) {
 	off_t orig_off = offset;
 	bool r = mp4_.advanceOffset(offset);
 	auto skipped = offset - orig_off;
-	if (skipped && !mp4_.ctx_.unknown_length_) {
+	if (skipped && !mp4_.ctx_.scan_.unknown_length_) {
 		dbgg("chkOffset ", skipped);
 		chkExcludeOverlap(orig_off, skipped);
 		mp4_.addToExclude(orig_off, skipped);
@@ -66,18 +67,18 @@ bool Mp4Repairer::chkOffset(off_t &offset) {
 void Mp4Repairer::addMatch(off_t &offset, FrameInfo &match) {
 	auto &t = mp4_.tracks_[match.track_idx_];
 
-	if (mp4_.ctx_.use_offset_map_) mp4_.chkFrameDetectionAt(match, offset);
+	if (mp4_.ctx_.scan_.use_offset_map_) mp4_.chkFrameDetectionAt(match, offset);
 
 	if (mp4_.chkUnknownSequenceEnded(offset)) {
 		logg(V, "found healthy packet again: ", match, "\n");
 		mp4_.correctChunkIdx(match.track_idx_);
 	}
 
-	if (!mp4_.ctx_.first_chunk_found_) mp4_.onFirstChunkFound(match.track_idx_);
-	if (mp4_.ctx_.last_track_idx_ != match.track_idx_) {
+	if (!mp4_.ctx_.scan_.first_chunk_found_) mp4_.onFirstChunkFound(match.track_idx_);
+	if (mp4_.ctx_.scan_.last_track_idx_ != match.track_idx_) {
 		onNewChunkStarted(match.track_idx_);
 		t.current_chunk_.off_ = offset;
-		t.current_chunk_.already_excluded_ = mp4_.ctx_.current_mdat_->total_excluded_yet_;
+		t.current_chunk_.already_excluded_ = mp4_.ctx_.file_.mdat_->total_excluded_yet_;
 	}
 
 	if (t.has_duplicates_ && t.chunkReachedSampleLimit()) {
@@ -86,7 +87,7 @@ void Mp4Repairer::addMatch(off_t &offset, FrameInfo &match) {
 
 	if (!t.is_dummy_) {
 		mp4_.addFrame(match);
-		mp4_.ctx_.pkt_idx_++;
+		mp4_.ctx_.scan_.pkt_idx_++;
 	}
 
 	t.current_chunk_.n_samples_++;
@@ -96,7 +97,7 @@ void Mp4Repairer::addMatch(off_t &offset, FrameInfo &match) {
 	if (match.pad_afterwards_) {
 		mp4_.addToExclude(offset, match.pad_afterwards_);
 		offset += match.pad_afterwards_;
-		mp4_.ctx_.done_padding_ = true;
+		mp4_.ctx_.scan_.done_padding_ = true;
 	}
 }
 
@@ -116,11 +117,11 @@ bool Mp4Repairer::tryChunkPrediction(off_t &offset) {
 	if (chunk) {
 		auto &t = mp4_.tracks_[chunk.track_idx_];
 
-		if (mp4_.ctx_.use_offset_map_) mp4_.chkChunkDetectionAt(chunk, offset);
+		if (mp4_.ctx_.scan_.use_offset_map_) mp4_.chkChunkDetectionAt(chunk, offset);
 
-		if (mp4_.ctx_.unknown_length_ && t.is_dummy_) {
+		if (mp4_.ctx_.scan_.unknown_length_ && t.is_dummy_) {
 			logg(V, "found '", t.codec_.name_, "' chunk inside unknown sequence: ", chunk, "\n");
-			mp4_.ctx_.unknown_length_ += chunk.size_;
+			mp4_.ctx_.scan_.unknown_length_ += chunk.size_;
 		} else if (mp4_.chkUnknownSequenceEnded(offset)) {
 			logg(V, "found healthy chunk again: ", chunk, "\n");
 			mp4_.correctChunkIdx(chunk.track_idx_);
@@ -129,11 +130,11 @@ bool Mp4Repairer::tryChunkPrediction(off_t &offset) {
 		onNewChunkStarted(chunk.track_idx_);
 
 		t.current_chunk_ = chunk;
-		t.current_chunk_.already_excluded_ = mp4_.ctx_.current_mdat_->total_excluded_yet_;
+		t.current_chunk_.already_excluded_ = mp4_.ctx_.file_.mdat_->total_excluded_yet_;
 
 		if (!t.is_dummy_) {
 			mp4_.addChunk(chunk);
-			mp4_.ctx_.pkt_idx_ += chunk.n_samples_;
+			mp4_.ctx_.scan_.pkt_idx_ += chunk.n_samples_;
 		}
 
 		assertt(chunk.size_ >= 0);
@@ -173,15 +174,15 @@ bool Mp4Repairer::handleSpecialModes(const string &filename) {
 		if (!isPointingAtRtmdHeader(file_read)) {
 			logg(W, "'-rsv-ben' specified but file does not start with rtmd header\n");
 		}
-		mp4_.repairRsvBen(filename);
+		RsvRepairer(mp4_).repair(filename);
 		return true;
 	}
 	return false;
 }
 
 void Mp4Repairer::prepareStats(const string &filename) {
-	mp4_.ctx_.use_offset_map_ = mp4_.ctx_.use_offset_map_ || filename == mp4_.filename_ok_;
-	if (mp4_.ctx_.use_offset_map_) mp4_.analyze(true);
+	mp4_.ctx_.scan_.use_offset_map_ = mp4_.ctx_.scan_.use_offset_map_ || filename == mp4_.filename_ok_;
+	if (mp4_.ctx_.scan_.use_offset_map_) mp4_.analyze(true);
 
 	if (mp4_.needDynStats()) {
 		g_options.use_chunk_stats = true;
@@ -190,24 +191,25 @@ void Mp4Repairer::prepareStats(const string &filename) {
 		logg(I, "using dynamic stats, use '-is' to see them\n");
 	} else if (mp4_.setDuplicateInfo()) {
 		mp4_.genTrackOrder();
-		if (mp4_.ctx_.track_order_simple_.empty()) {
+		if (mp4_.ctx_.order_.track_order_simple_.empty()) {
 			logg(W, "duplicate codecs found, but no (simple) track order found\n");
 		}
 	}
 
 	if (g_options.log_mode >= LogMode::V) mp4_.printStats();
 
-	if (!g_options.ignore_unknown && mp4_.ctx_.max_part_size_ < g_options.max_partsize_default) {
-		double x = (double)mp4_.ctx_.max_part_size_ / g_options.max_partsize_default;
-		logg(V, "ss: reset to default (from ", mp4_.ctx_.max_part_size_, " ~= ", setprecision(2), x, "*default)\n");
-		mp4_.ctx_.max_part_size_ = g_options.max_partsize_default;
+	if (!g_options.ignore_unknown && mp4_.ctx_.file_.max_part_size_ < g_options.max_partsize_default) {
+		double x = (double)mp4_.ctx_.file_.max_part_size_ / g_options.max_partsize_default;
+		logg(V, "ss: reset to default (from ", mp4_.ctx_.file_.max_part_size_, " ~= ", setprecision(2), x,
+		     "*default)\n");
+		mp4_.ctx_.file_.max_part_size_ = g_options.max_partsize_default;
 	}
-	logg(V, "ss: max_part_size_: ", mp4_.ctx_.max_part_size_, "\n");
+	logg(V, "ss: max_part_size_: ", mp4_.ctx_.file_.max_part_size_, "\n");
 }
 
 BufferedAtom *Mp4Repairer::setupFile(const string &filename) {
-	mp4_.ctx_.fallback_track_idx_ = mp4_.calcFallbackTrackIdx();
-	logg(V, "fallback: ", mp4_.ctx_.fallback_track_idx_, "\n");
+	mp4_.ctx_.scan_.fallback_track_idx_ = mp4_.calcFallbackTrackIdx();
+	logg(V, "fallback: ", mp4_.ctx_.scan_.fallback_track_idx_, "\n");
 
 	auto &file_read = mp4_.openFile(filename);
 
@@ -217,7 +219,7 @@ BufferedAtom *Mp4Repairer::setupFile(const string &filename) {
 	logg(I, "reading mdat from truncated file ...\n");
 
 	if (file_read.length() > (1LL << 32)) {
-		mp4_.ctx_.broken_is_64_ = true;
+		mp4_.ctx_.file_.broken_is_64_ = true;
 		logg(I, "using 64-bit offsets for the broken file\n");
 	}
 	return mdat;
@@ -239,25 +241,25 @@ void Mp4Repairer::precomputeAudioSampleSizes() {
 }
 
 off_t Mp4Repairer::calcStartOffset(BufferedAtom *mdat) {
-	if (!g_options.use_chunk_stats) return 0;
+	if (!g_options.use_chunk_stats) return 0; // offset, not bool
 
 	off_t start_off = 0;
 	off_t offset = 0;
 
-	auto first_off_abs = mp4_.ctx_.first_off_abs_ - mdat->contentStart();
+	auto first_off_abs = mp4_.ctx_.scan_.first_off_abs_ - mdat->contentStart();
 	if (first_off_abs > 0 && mp4_.wouldMatch(WMCfg{.offset = first_off_abs})) {
-		dbgg("set start offset via", mp4_.ctx_.first_off_abs_, first_off_abs);
+		dbgg("set start offset via", mp4_.ctx_.scan_.first_off_abs_, first_off_abs);
 		offset = first_off_abs;
-	} else if (mp4_.ctx_.first_off_rel_) {
-		if (mp4_.wouldMatch(WMCfg{.offset = mp4_.ctx_.first_off_rel_, .very_first = true})) {
-			dbgg("set start offset via", mp4_.ctx_.first_off_rel_);
-			offset = mp4_.ctx_.first_off_rel_;
+	} else if (mp4_.ctx_.scan_.first_off_rel_) {
+		if (mp4_.wouldMatch(WMCfg{.offset = mp4_.ctx_.scan_.first_off_rel_, .very_first = true})) {
+			dbgg("set start offset via", mp4_.ctx_.scan_.first_off_rel_);
+			offset = mp4_.ctx_.scan_.first_off_rel_;
 		} else {
 			mp4_.advanceOffset(start_off, true); // some atom (e.g. wide) might get skipped
 			if (start_off &&
-			    mp4_.wouldMatch(WMCfg{.offset = start_off + mp4_.ctx_.first_off_rel_, .very_first = true})) {
-				dbgg("set start offset via rel2", start_off, mp4_.ctx_.first_off_rel_);
-				offset = start_off + mp4_.ctx_.first_off_rel_;
+			    mp4_.wouldMatch(WMCfg{.offset = start_off + mp4_.ctx_.scan_.first_off_rel_, .very_first = true})) {
+				dbgg("set start offset via rel2", start_off, mp4_.ctx_.scan_.first_off_rel_);
+				offset = start_off + mp4_.ctx_.scan_.first_off_rel_;
 			}
 		}
 	}
@@ -289,7 +291,7 @@ void Mp4Repairer::repair(const string &filename) {
 	while (chkOffset(offset)) {
 		if (tryAll(offset)) continue;
 
-		if (!mp4_.ctx_.unknown_length_) {
+		if (!mp4_.ctx_.scan_.unknown_length_) {
 			pushBackLastChunk();
 			mp4_.setLastTrackIdx(mp4_.idx_free_);
 		}
@@ -306,7 +308,7 @@ void Mp4Repairer::repair(const string &filename) {
 			}
 
 			auto step = mp4_.calcStep(offset);
-			mp4_.ctx_.unknown_length_ += step;
+			mp4_.ctx_.scan_.unknown_length_ += step;
 			offset += step;
 		} else {
 			if (g_options.muted) unmute();

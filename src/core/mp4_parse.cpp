@@ -161,12 +161,12 @@ void Mp4::parseTracksOk() {
 			assertt(track.chunks_.back().off_ < mdats.back()->start_ + mdats.back()->length_);
 		}
 
-		ctx_.max_part_size_ = max(ctx_.max_part_size_, track.ss_stats_.maxAllowedPktSz());
+		ctx_.file_.max_part_size_ = max(ctx_.file_.max_part_size_, track.ss_stats_.maxAllowedPktSz());
 	}
 
 	if (g_options.max_partsize > 0) {
 		logg(V, "ss: using manually specified: ", g_options.max_partsize, "\n");
-		ctx_.max_part_size_ = g_options.max_partsize;
+		ctx_.file_.max_part_size_ = g_options.max_partsize;
 	}
 }
 void Mp4::chkStretchFactor() {
@@ -206,14 +206,14 @@ void Mp4::setDuration() {
 	}
 }
 FileRead &Mp4::openFile(const string &filename) {
-	ctx_.current_file_ = std::make_unique<FileRead>(filename);
-	if (!ctx_.current_file_->length()) throw length_error(ss("zero-length file: ", filename));
-	return *ctx_.current_file_;
+	ctx_.file_.file_ = std::make_unique<FileRead>(filename);
+	if (!ctx_.file_.file_->length()) throw length_error(ss("zero-length file: ", filename));
+	return *ctx_.file_.file_;
 }
 void Mp4::checkForBadTracks() {
-	if (ctx_.track_order_.size()) return; // we already checked via `isTrackOrderEnough()`
+	if (ctx_.order_.track_order_.size()) return; // we already checked via `isTrackOrderEnough()`
 	for (auto &t : tracks_) {
-		if (!t.isSupported() && !t.hasPredictableChunks() && !(t.is_dummy_ && ctx_.dummy_is_skippable_)) {
+		if (!t.isSupported() && !t.hasPredictableChunks() && !(t.is_dummy_ && ctx_.dummy_.is_skippable_)) {
 			logg(W, "Bad track: '", t.codec_.name_, "'\n",
 			     "         Adding more sophisticated logic for this track could significantly improve the recovered "
 			     "file's quality!\n");
@@ -254,8 +254,8 @@ BufferedAtom *Mp4::mdatFromRange(FileRead &file_read, BufferedAtom &mdat) {
 }
 
 BufferedAtom *Mp4::findMdat(FileRead &file_read) {
-	ctx_.current_mdat_ = std::make_unique<BufferedAtom>(file_read);
-	auto &mdat = *ctx_.current_mdat_;
+	ctx_.file_.mdat_ = std::make_unique<BufferedAtom>(file_read);
+	auto &mdat = *ctx_.file_.mdat_;
 
 	if (file_read.filename_ == filename_ok_) {
 		Atom *p = root_atom_->atomByName("mdat", true);

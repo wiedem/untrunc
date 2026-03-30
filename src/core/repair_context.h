@@ -13,45 +13,53 @@
 
 class Track; // forward declaration: only a pointer is stored
 
-struct RepairContext {
-	// File access
-	std::unique_ptr<FileRead> current_file_;
-	std::unique_ptr<BufferedAtom> current_mdat_;
+// File I/O state for the broken file being repaired.
+struct FileState {
+	std::unique_ptr<FileRead> file_;
+	std::unique_ptr<BufferedAtom> mdat_;
 	uint current_maxlength_ = 0;
-
-	// Scan loop state
+	uint max_part_size_ = 0;
 	bool broken_is_64_ = false;
+};
+
+// Mutable state for the main scan loop.
+struct ScanState {
 	int64_t unknown_length_ = 0;
+	std::vector<int64_t> unknown_lengths_;
 	std::vector<uint> atoms_skipped_;
 	uint64_t pkt_idx_ = 0;
 	int last_track_idx_ = -1;
 	bool done_padding_ = false;
 	bool done_padding_after_ = false;
-	std::vector<int64_t> unknown_lengths_;
 	bool use_offset_map_ = false;
+	bool first_chunk_found_ = false;
+	bool ignored_chunk_order_ = false;
+	int fallback_track_idx_ = -1;
+	Track *orig_first_track_ = nullptr;
 	off_t first_off_rel_ = -1;
 	off_t first_off_abs_ = -1;
+};
 
-	// Chunk ordering
+// Chunk ordering derived from the reference file.
+struct ChunkOrderState {
 	std::vector<std::pair<int, int>> track_order_;
 	std::vector<int> track_order_simple_;
 	bool trust_simple_track_order_ = false;
-	int cycle_size_ = 0;           // (average) size of single track_order_ repetition
-	uint64_t next_chunk_idx_ = 0;  // does not count the 'free' track
-	bool ignored_chunk_order_ = false;
-
-	// Dynamic patterns
+	int cycle_size_ = 0;          // (average) size of single track_order_ repetition
+	uint64_t next_chunk_idx_ = 0; // does not count the 'free' track
 	bool using_dyn_patterns_ = false;
+};
 
-	// Chunk detection helpers
-	uint max_part_size_ = 0;
-	bool first_chunk_found_ = false;
-	int fallback_track_idx_ = -1;
-
-	Track *orig_first_track_ = nullptr;
-
-	// Padding / dummy track
-	bool dummy_is_skippable_ = false;
-	int dummy_do_padding_skip_ = 0;
+// Padding / dummy track state.
+struct DummyTrackState {
+	bool is_skippable_ = false;
+	int do_padding_skip_ = 0;
 	bool has_zero_transitions_ = false;
+};
+
+struct RepairContext {
+	FileState file_;
+	ScanState scan_;
+	ChunkOrderState order_;
+	DummyTrackState dummy_;
 };

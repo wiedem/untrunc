@@ -9,7 +9,9 @@ ChunkIt::ChunkIt(const Mp4 *mp4, bool do_filter, bool exclude_dummy) : mp4_(mp4)
 	mdat_end_ = mp4->mdatEnd();
 
 	bad_tmcd_idx_ = mp4_->getTrackIdx2("tmcd");
-	if (bad_tmcd_idx_ >= 0 && mp4->tracks_[bad_tmcd_idx_].chunks_[0].size_ > 4) bad_tmcd_idx_ = -1;
+	if (bad_tmcd_idx_ >= 0 &&
+	    (!mp4->tracks_[bad_tmcd_idx_].chunks_.empty() && mp4->tracks_[bad_tmcd_idx_].chunks_[0].size_ > 4))
+		bad_tmcd_idx_ = -1;
 	operator++();
 }
 

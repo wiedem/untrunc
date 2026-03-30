@@ -3,7 +3,6 @@ FF_VER := shared
 _EXE   := untrunc
 IS_RELEASE := 0
 IS_STATIC := 0
-LIBUI_STATIC := 0
 
 TARGET := $(firstword $(MAKECMDGOALS))
 
@@ -16,8 +15,8 @@ endif
 FFDIR := ffmpeg-$(FF_VER)
 
 ifeq ($(FF_VER), shared)
-	CXXFLAGS += -isystem/usr/include/ffmpeg
-	LDFLAGS += -lavformat -lavcodec -lavutil
+	CXXFLAGS += $(shell pkg-config --cflags libavformat libavcodec libavutil)
+	LDFLAGS += $(shell pkg-config --libs libavformat libavcodec libavutil)
 else
 	CXXFLAGS += -isystem./$(FFDIR)
 	LDFLAGS += -L$(FFDIR)/libavformat -lavformat
@@ -61,23 +60,6 @@ SRC := $(wildcard src/*.cpp src/atom/*.cpp src/codec/*.cpp src/codec/avc1/*.cpp 
 OBJ := $(SRC:%.cpp=$(DIR)/%.o)
 DEP := $(OBJ:.o=.d)
 
-SRC_GUI := $(wildcard src/gui/*.cpp)
-OBJ_GUI := $(SRC_GUI:%.cpp=$(DIR)/%.o)
-DEP_GUI := $(OBJ_GUI:.o=.d)
-
-ifeq ($(TARGET), $(_EXE)-gui)
-	LDFLAGS += -lui -lpthread
-
-	machine = $(shell $(CXX) -dumpmachine)
-	ifneq (,$(findstring mingw,$(machine)))
-		LDFLAGS += -Wl,--subsystem,windows
-		ifeq ($(LIBUI_STATIC), 1)
-			OBJ_GUI += $(DIR)/src/gui/win_resources.o
-			LDFLAGS += -lpthread -luser32 -lkernel32 -lusp10 -lgdi32 -lcomctl32 -luxtheme -lmsimg32 -lcomdlg32 -ld2d1 -ldwrite -lole32 -loleaut32 -loleacc
-		endif
-	endif
-endif
-
 NPROC = $(shell command -v nproc >/dev/null && nproc || echo 1)
 NJOBS = $(shell echo $$(( $(NPROC) / 3)) )
 ifeq ($(NJOBS), 0)
@@ -85,9 +67,6 @@ ifeq ($(NJOBS), 0)
 endif
 
 
-#$(info $$OBJ is [${OBJ}])
-#$(info $$OBJ_GUI is [${OBJ_GUI}])
-$(shell mkdir -p $(dir $(OBJ_GUI)) 2>/dev/null)
 $(shell mkdir -p $(DIR)/src/atom $(DIR)/src/codec/avc1 $(DIR)/src/codec/hvc1 $(DIR)/src/core $(DIR)/src/io $(DIR)/src/track $(DIR)/src/util $(DIR)/tests 2>/dev/null)
 
 CURL := $(shell command -v curl 2>/dev/null)
@@ -110,9 +89,9 @@ endif
 
 $(FFDIR)/config.asm: | $(FFDIR)/configure
 	@echo "(info) please wait ..."
-	cd $(FFDIR); ./configure --disable-doc --disable-programs \
+	cd $(FFDIR); ./configure --disable-doc --disable-programs --disable-shared \
 	--disable-everything --enable-decoders --disable-vdpau --enable-demuxers --enable-protocol=file \
-	--disable-avdevice --disable-swresample --disable-swscale --disable-avfilter --disable-postproc \
+	--disable-avdevice --disable-swresample --disable-swscale --disable-avfilter \
 	--disable-xlib --disable-vaapi --disable-zlib --disable-bzlib --disable-lzma \
 	--disable-audiotoolbox --disable-videotoolbox
 
@@ -133,12 +112,6 @@ print_info: | $(FFDIR)
 $(EXE): print_info $(OBJ)
 	$(CXX) $(filter-out $<,$^) $(LDFLAGS) -o $@
 
-$(EXE)-gui: print_info $(filter-out $(DIR)/src/main.o, $(OBJ)) $(OBJ_GUI)
-	$(CXX) $(filter-out $<,$^) $(LDFLAGS) -o $@
-
-$(DIR)/%/win_resources.o: %/win_resources.rc
-	windres.EXE $< $@
-
 # rebuild src/common.o on new version/CPPFLAGS
 $(DIR)/cpp_flags: force
 	@echo '$(CPPFLAGS)' | cmp -s - $@ || echo '$(CPPFLAGS)' > $@
@@ -156,12 +129,10 @@ $(DIR)/%.o: %.cpp
 endif
 
 -include $(DEP)
--include $(DEP_GUI)
 
 clean:
 	$(RM) -r $(DIR)
 	$(RM) $(EXE)
-	$(RM) $(EXE)-gui
 
 # Unit tests
 TEST_SRCS := $(wildcard tests/*.cpp)

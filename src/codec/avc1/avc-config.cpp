@@ -45,6 +45,9 @@ bool AvcConfig::decode(const uchar *start) {
 		logg(V, "avcC config version != 1\n");
 		return false;
 	}
+	// start[0] already consumed; start[1..3] = profile/level; start[4] = 0b111111 | lengthSizeMinusOne
+	nal_length_size = (start[4] & 0x03) + 1;
+	logg(V, "avcC nal_length_size: ", nal_length_size, "\n");
 	start += 4;
 	uint reserved = readBits(3, start, off); // 111
 	if (reserved != 7) {

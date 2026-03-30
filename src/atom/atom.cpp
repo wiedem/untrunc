@@ -41,11 +41,12 @@ Atom::~Atom() = default;
 
 void Atom::parseHeader(FileRead &file, bool no_check) {
 	start_ = file.pos();
+	header_length_ = 8;
 	length_ = file.readInt();
 	name_ = file.getString(4);
 	if (length_ == 1) {
 		length_ = file.readInt64();
-		header_length_ += 8;
+		header_length_ = 16;
 	} else if (length_ == 0)
 		length_ = file.length() - start_;
 
@@ -372,7 +373,9 @@ void Atom::updateLength() {
 }
 
 int64_t Atom::readInt64(off_t offset) {
-	return swap64(*(int64_t *)&(content_[offset]));
+	int64_t val;
+	memcpy(&val, &content_[offset], sizeof(val));
+	return swap64(val);
 }
 
 uint Atom::readInt(off_t offset) {
@@ -388,7 +391,8 @@ uint Atom::readInt() {
 
 void Atom::writeInt64(int64_t value, off_t offset) {
 	assertt(content_.size() >= to_size_t(offset + 8));
-	*(int64_t *)&(content_[offset]) = swap64(value);
+	int64_t swapped = swap64(value);
+	memcpy(&content_[offset], &swapped, sizeof(swapped));
 }
 
 void Atom::writeInt64(int64_t value) {
@@ -398,7 +402,8 @@ void Atom::writeInt64(int64_t value) {
 
 void Atom::writeInt(int value, off_t offset) {
 	assertt(content_.size() >= to_size_t(offset + 4));
-	*(int *)&(content_[offset]) = swap32(value);
+	int swapped = swap32(value);
+	memcpy(&content_[offset], &swapped, sizeof(swapped));
 }
 
 void Atom::writeInt(int value) {
@@ -423,7 +428,9 @@ const uchar *BufferedAtom::getFragment(off_t offset, int size) {
 
 uint BufferedAtom::readInt(off_t offset) {
 	file_read_.seek(contentStart() + offset);
-	return *(uint *)file_read_.getPtr(sizeof(int));
+	uint val;
+	memcpy(&val, file_read_.getPtr(sizeof(uint)), sizeof(val));
+	return val;
 }
 
 bool BufferedAtom::needs64bitVersion() {

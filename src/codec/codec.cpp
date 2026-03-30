@@ -1,6 +1,7 @@
 #include "codec.h"
 
 #include <iostream>
+#include <utility>
 #include <vector>
 
 extern "C" {
@@ -15,6 +16,7 @@ extern "C" {
 #include "atom/atom.h"
 #include "avc1/avc1.h"
 #include "avc1/avc-config.h"
+#include "hvc1/hvc-config.h"
 #include "hvc1/hvc1.h"
 #include "core/mp4.h"
 
@@ -36,10 +38,10 @@ Codec::~Codec() {
 Codec::Codec(Codec &&o) noexcept
     : name_(std::move(o.name_)), av_codec_params_(o.av_codec_params_),
       av_codec_context_(std::exchange(o.av_codec_context_, nullptr)), avc_config_(std::move(o.avc_config_)),
-      was_keyframe_(o.was_keyframe_), was_bad_(o.was_bad_), audio_duration_(o.audio_duration_),
-      should_dump_(o.should_dump_), chk_for_twos_(o.chk_for_twos_), strictness_lvl_(o.strictness_lvl_),
-      cur_off_(o.cur_off_), ss_stats_(o.ss_stats_), track_idx_(o.track_idx_), fdsc_pkt_idx_(o.fdsc_pkt_idx_),
-      mp4_(o.mp4_), decode_packet_(std::exchange(o.decode_packet_, nullptr)),
+      hvc_config_(std::move(o.hvc_config_)), was_keyframe_(o.was_keyframe_), was_bad_(o.was_bad_),
+      audio_duration_(o.audio_duration_), should_dump_(o.should_dump_), chk_for_twos_(o.chk_for_twos_),
+      strictness_lvl_(o.strictness_lvl_), cur_off_(o.cur_off_), ss_stats_(o.ss_stats_), track_idx_(o.track_idx_),
+      fdsc_pkt_idx_(o.fdsc_pkt_idx_), mp4_(o.mp4_), decode_packet_(std::exchange(o.decode_packet_, nullptr)),
       decode_frame_(std::exchange(o.decode_frame_, nullptr)), match_fn_(o.match_fn_),
       match_strict_fn_(o.match_strict_fn_), get_size_fn_(o.get_size_fn_) {}
 
@@ -51,6 +53,7 @@ Codec &Codec::operator=(Codec &&o) noexcept {
 		av_codec_params_ = o.av_codec_params_;
 		av_codec_context_ = std::exchange(o.av_codec_context_, nullptr);
 		avc_config_ = std::move(o.avc_config_);
+		hvc_config_ = std::move(o.hvc_config_);
 		was_keyframe_ = o.was_keyframe_;
 		was_bad_ = o.was_bad_;
 		audio_duration_ = o.audio_duration_;
@@ -139,6 +142,12 @@ void Codec::parseOk(Atom *trak) {
 			logg(W, "avcC was not decoded correctly\n");
 		else
 			logg(V, "avcC got decoded\n");
+	} else if (name_ == "hvc1" || name_ == "hev1") {
+		hvc_config_ = std::make_unique<HvcConfig>(stsd);
+		if (!hvc_config_->is_ok)
+			logg(W, "hvcC was not decoded correctly\n");
+		else
+			logg(V, "hvcC got decoded\n");
 	} else if (name_ == "sowt")
 		Codec::twos_is_sowt = true;
 }

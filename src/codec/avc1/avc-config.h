@@ -11,6 +11,7 @@ class AvcConfig {
 	AvcConfig(const Atom *stsd);
 	~AvcConfig();
 	bool is_ok = false;
+	int nal_length_size = 4; // bytes per NAL length prefix (from avcC lengthSizeMinusOne)
 	std::unique_ptr<SpsInfo> sps_info_;
 
   private:

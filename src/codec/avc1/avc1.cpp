@@ -27,6 +27,12 @@ int getSizeAvc1(Codec *self, const uchar *start, uint maxlength) {
 		sps_info_initialized = true;
 		logg(V, "sps_info (after):  ", sps_info.frame_mbs_only_flag, ' ', sps_info.log2_max_frame_num, ' ',
 		     sps_info.log2_max_poc_lsb, ' ', sps_info.poc_type, '\n');
+		if (sps_info.poc_type == 1)
+			logg(W, "H.264 stream uses poc_type=1: delta_pic_order_cnt is not checked; "
+			        "access unit boundaries may be missed in rare GOP structures\n");
+		if (!sps_info.frame_mbs_only_flag)
+			logg(W, "H.264 stream uses interlaced encoding: delta_poc_bottom is not checked; "
+			        "access unit boundaries may be missed for field-coded pictures\n");
 	}
 
 	SliceInfo previous_slice;
@@ -36,7 +42,7 @@ int getSizeAvc1(Codec *self, const uchar *start, uint maxlength) {
 	while (1) {
 		logg(V, "---\n");
 		if (self->chk_for_twos_ && Codec::looksLikeTwosOrSowt(pos)) return length;
-		NalInfo nal_info(pos, maxlength);
+		NalInfo nal_info(pos, maxlength, self->avc_config_ ? self->avc_config_->nal_length_size : 4);
 		bool was_keyframe = false;
 		if (!nal_info.is_ok) {
 			logg(V, "failed parsing nal-header\n");
