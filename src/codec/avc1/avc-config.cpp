@@ -39,16 +39,16 @@ AvcConfig::~AvcConfig() = default;
 
 bool AvcConfig::decode(const uchar *start) {
 	logg(V, "parsing avcC ...\n");
+	// Read lengthSizeMinusOne from byte 4 before readBits advances the pointer.
+	nal_length_size = (start[4] & 0x03) + 1;
+	logg(V, "avcC nal_length_size: ", nal_length_size, "\n");
 	int off = 0;
-	int ver = readBits(8, start, off); // config_version
+	int ver = readBits(8, start, off); // config_version, advances start by 1
 	if (ver != 1) {
 		logg(V, "avcC config version != 1\n");
 		return false;
 	}
-	// start[0] already consumed; start[1..3] = profile/level; start[4] = 0b111111 | lengthSizeMinusOne
-	nal_length_size = (start[4] & 0x03) + 1;
-	logg(V, "avcC nal_length_size: ", nal_length_size, "\n");
-	start += 4;
+	start += 3; // skip profile, compatibility, level (readBits already consumed 1 byte)
 	uint reserved = readBits(3, start, off); // 111
 	if (reserved != 7) {
 		logg(V, "avcC - reserved is not reserved: ", reserved, '\n');

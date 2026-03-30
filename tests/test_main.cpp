@@ -19,6 +19,7 @@ void test_h265_nal_types();
 void test_sample_stats();
 void test_repair_report();
 void test_analyze_report();
+void test_avc_config();
 
 int main() {
 	test_bitreader();
@@ -36,6 +37,7 @@ int main() {
 	test_sample_stats();
 	test_repair_report();
 	test_analyze_report();
+	test_avc_config();
 
 	int total = g_tests_passed + g_tests_failed;
 	std::cout << "\n" << g_tests_passed << "/" << total << " tests passed";
