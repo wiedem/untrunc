@@ -19,6 +19,12 @@ extern "C" {
 #define UNTR_VERSION "?"
 #endif
 
+// UNTR_FF_BUILD_VER is set at compile time from $(FF_VER) for static builds.
+// For shared builds it is not defined, so fall back to FFMPEG_VERSION from the header.
+#ifndef UNTR_FF_BUILD_VER
+#define UNTR_FF_BUILD_VER FFMPEG_VERSION
+#endif
+
 const bool has_sawb_bug = false;
 
 using namespace std;
@@ -26,7 +32,7 @@ using namespace std;
 Options g_options;
 uint g_num_w2 = 0;
 
-std::string g_version_str = "untrunc " UNTR_VERSION " (FFmpeg " FFMPEG_VERSION ")";
+std::string g_version_str = "untrunc " UNTR_VERSION " (FFmpeg " UNTR_FF_BUILD_VER ")";
 
 uint16_t swap16(uint16_t us) {
 	return (us >> 8) | (us << 8);

@@ -51,6 +51,9 @@ GIT_HASH := $(shell test -d .git && command -v git >/dev/null && git describe --
 VER      := $(SEMVER)$(if $(GIT_HASH),+$(GIT_HASH))
 CPPFLAGS += -MMD -MP
 CPPFLAGS += -DUNTR_VERSION=\"$(VER)\"
+ifneq ($(FF_VER), shared)
+CPPFLAGS += -DUNTR_FF_BUILD_VER=\"$(FF_VER)\"
+endif
 USE_GCH := 0
 
 EXE ?= $(_EXE)
