@@ -10,6 +10,9 @@ on:
         required: false
         default: '8.1'
 
+env:
+  FF_VER: ${{ inputs.ffmpeg_version || '8.1' }}
+
 jobs:
   build-linux:
     runs-on: ubuntu-24.04
@@ -21,14 +24,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential nasm pkg-config wget xz-utils zlib1g-dev
 
-      - name: Download and build FFmpeg ${{ inputs.ffmpeg_version }}
-        run: make ffmpeg-${{ inputs.ffmpeg_version }}/libavcodec/libavcodec.a FF_VER=${{ inputs.ffmpeg_version }} -j$(nproc)
+      - name: Download and build FFmpeg ${{ env.FF_VER }}
+        run: make ffmpeg-${{ env.FF_VER }}/libavcodec/libavcodec.a FF_VER=${{ env.FF_VER }} -j$(nproc)
 
       - name: Build untrunc (static)
-        run: make FF_VER=${{ inputs.ffmpeg_version }} IS_RELEASE=1 IS_STATIC=1 -j$(nproc)
+        run: make FF_VER=${{ env.FF_VER }} IS_RELEASE=1 IS_STATIC=1 -j$(nproc)
 
       - name: Run unit tests
-        run: make FF_VER=${{ inputs.ffmpeg_version }} IS_STATIC=1 check
+        run: make FF_VER=${{ env.FF_VER }} IS_STATIC=1 check
 
       - name: Verify binary
         run: |
@@ -51,14 +54,14 @@ jobs:
       - name: Install build dependencies
         run: brew install nasm
 
-      - name: Download and build FFmpeg ${{ inputs.ffmpeg_version }}
-        run: make ffmpeg-${{ inputs.ffmpeg_version }}/libavcodec/libavcodec.a FF_VER=${{ inputs.ffmpeg_version }} -j$(sysctl -n hw.ncpu)
+      - name: Download and build FFmpeg ${{ env.FF_VER }}
+        run: make ffmpeg-${{ env.FF_VER }}/libavcodec/libavcodec.a FF_VER=${{ env.FF_VER }} -j$(sysctl -n hw.ncpu)
 
       - name: Build untrunc
-        run: make FF_VER=${{ inputs.ffmpeg_version }} IS_RELEASE=1 -j$(sysctl -n hw.ncpu)
+        run: make FF_VER=${{ env.FF_VER }} IS_RELEASE=1 -j$(sysctl -n hw.ncpu)
 
       - name: Run unit tests
-        run: make FF_VER=${{ inputs.ffmpeg_version }} check
+        run: make FF_VER=${{ env.FF_VER }} check
 
       - name: Verify binary
         run: |
