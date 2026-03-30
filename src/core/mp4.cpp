@@ -89,8 +89,11 @@ Track &Mp4::getTrack(const string &codec_name) {
 
 void Mp4::afterTrackRealloc() {
 	for (int i = 0; i < (int)tracks_.size(); i++) {
-		tracks_[i].mp4_ = this;
-		tracks_[i].codec_.mp4_ = this;
+		tracks_[i].codec_.track_ = &tracks_[i];
+		tracks_[i].codec_.load_after_fn_ = [this](off_t off) -> const uchar * { return loadFragment(off, false); };
+		tracks_[i].codec_.find_size_fn_ = [this](off_t off, std::vector<int> sizes) {
+			return findSizeWithContinuation(off, std::move(sizes));
+		};
 		tracks_[i].codec_.onTrackRealloc(i);
 	}
 }

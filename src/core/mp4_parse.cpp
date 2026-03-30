@@ -262,8 +262,12 @@ BufferedAtom *Mp4::findMdat(FileRead &file_read) {
 		if (p) mdat.Atom::operator=(*p);
 	}
 
-	else if (g_options.range_start != kRangeUnset)
-		return mdatFromRange(file_read, mdat);
+	else if (g_options.range_start != kRangeUnset) {
+		auto *result = mdatFromRange(file_read, mdat);
+		for (auto &t : tracks_)
+			t.mdat_content_start_ = ctx_.file_.mdat_->contentStart();
+		return result;
+	}
 
 	if (!isPointingAtAtom(file_read)) {
 		if (isPointingAtRtmdHeader(file_read)) {
@@ -289,6 +293,9 @@ BufferedAtom *Mp4::findMdat(FileRead &file_read) {
 
 	findAtom(file_read, "mdat", mdat);
 	mdat.file_end_ = file_read.length();
+
+	for (auto &t : tracks_)
+		t.mdat_content_start_ = ctx_.file_.mdat_->contentStart();
 
 	return &mdat;
 }

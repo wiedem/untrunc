@@ -224,7 +224,7 @@ void Mp4::genDynPatterns() {
 	}
 
 	for (auto &t : tracks_) {
-		t.genPatternPerm();
+		t.genPatternPerm(twos_track_idx_, [this](uint i) { return getCodecName(i); });
 		ctx_.dummy_.has_zero_transitions_ = ctx_.dummy_.has_zero_transitions_ || t.hasZeroTransitions();
 	}
 	logg(V, "ctx_.dummy_.has_zero_transitions_: ", ctx_.dummy_.has_zero_transitions_, '\n');

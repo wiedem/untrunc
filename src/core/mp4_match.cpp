@@ -161,8 +161,44 @@ FrameInfo Mp4::getMatch(off_t offset, bool force_strict) {
 	return FrameInfo();
 }
 
+bool Mp4::doesMatchTransitionForTrack(int track_idx, const uchar *buff, int target_idx) {
+	auto &t = tracks_[track_idx];
+	for (auto &p : t.dyn_patterns_[target_idx]) {
+		if (p.doesMatch(buff)) return true;
+	}
+
+	auto anyTrackMatches = [&](const uchar *start) {
+		for (auto &tr : tracks_)
+			if (tr.codec_.matchSample(start)) return true;
+		return false;
+	};
+	if (t.has_unclear_transition_[target_idx] && !anyTrackMatches(buff + Mp4::pat_size_ / 2)) {
+		logg(V, "inverted chunk match: ", t.codec_.name_, "_", getCodecName(target_idx), "\n");
+		return true;
+	}
+
+	return false;
+}
+
+int Mp4::useDynPatternsForTrack(int track_idx, off_t offset) {
+	auto &t = tracks_[track_idx];
+	auto buff = getBuffAround(offset, Mp4::pat_size_);
+	if (!buff) return -1;
+
+	for (uint i = 0; i < t.dyn_patterns_perm_.size(); i++) {
+		if (i == to_uint(t.use_looks_like_twos_idx_) && Codec::looksLikeTwosOrSowt(buff + Mp4::pat_size_ / 2)) {
+			logg(V, "looksLikeTwos: ", t.codec_.name_, "_", getCodecName(twos_track_idx_), "\n");
+			return twos_track_idx_;
+		}
+		auto idx = t.dyn_patterns_perm_[i];
+		if (!tracks_[idx].isChunkOffsetOk(offset)) continue;
+		if (doesMatchTransitionForTrack(track_idx, buff, idx)) return idx;
+	}
+	return -1;
+}
+
 bool Mp4::wouldMatchDyn(off_t offset, int last_idx) {
-	auto new_track = tracks_[last_idx].useDynPatterns(offset);
+	auto new_track = useDynPatternsForTrack(last_idx, offset);
 	if (new_track >= 0) {
 		logg(V, "wouldMatchDyn(", offset, ", ", last_idx, ") -> yes (", getCodecName(last_idx), "_",
 		     getCodecName(new_track), ")\n");

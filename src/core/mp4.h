@@ -113,7 +113,7 @@ class Mp4 : public HasHeaderAtom {
 
 	static uint64_t step_;
 	std::vector<Track> tracks_;
-	static const int pat_size_ = 32;
+	static constexpr int pat_size_ = kPatternSize;
 	int idx_free_ = kNoFreeTrack;
 	std::vector<FreeSeq> free_seqs_;
 	bool has_moov_ = false;
@@ -160,6 +160,11 @@ class Mp4 : public HasHeaderAtom {
 	void afterTrackRealloc();
 
 	// --- Matching ---
+
+	// Dynamic pattern matching: determines the next track index via transition patterns.
+	// Moved from Track::useDynPatterns to avoid the Track->Mp4 back-pointer.
+	int useDynPatternsForTrack(int track_idx, off_t offset);
+	bool doesMatchTransitionForTrack(int track_idx, const uchar *buff, int target_idx);
 
 	bool wouldMatch(const WouldMatchCfg &cfg);
 	bool wouldMatchDyn(off_t offset, int last_idx);

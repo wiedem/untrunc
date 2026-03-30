@@ -5,7 +5,7 @@
 
 #include "codec/codec.h"
 #include "hvc-config.h"
-#include "core/mp4.h"
+#include "track/sample_stats.h"
 
 #include "nal-slice.h"
 #include "nal.h"
@@ -99,7 +99,7 @@ int getSizeHvc1(Codec *self, const uchar *start, uint maxlength) {
 	if (r.alternative_lengths.size()) {
 		auto &lens = r.alternative_lengths;
 		lens.push_back(r.length);
-		return self->mp4_->findSizeWithContinuation(self->cur_off_, lens);
+		return self->find_size_fn_(self->cur_off_, lens);
 	}
 	return r.length;
 }

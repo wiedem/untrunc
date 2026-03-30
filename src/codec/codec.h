@@ -1,4 +1,5 @@
 #pragma once
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -54,9 +55,13 @@ class Codec {
 
 	SampleSizeStats *ss_stats_ = nullptr; // set by onTrackRealloc
 	int track_idx_ = -1;
-	int fdsc_pkt_idx_ = -1; // per-instance counter for fdsc size detection
-	Mp4 *mp4_ = nullptr;    // back-pointer set by Mp4::afterTrackRealloc()
+	int fdsc_pkt_idx_ = -1;  // per-instance counter for fdsc size detection
+	Track *track_ = nullptr; // set by Mp4::afterTrackRealloc()
 	Track *getTrack();
+
+	// I/O callbacks set by Mp4::afterTrackRealloc(); replace the Mp4* back-pointer.
+	std::function<const uchar *(off_t)> load_after_fn_;
+	std::function<int(off_t, std::vector<int>)> find_size_fn_;
 
 	void onTrackRealloc(int track_idx_);
 

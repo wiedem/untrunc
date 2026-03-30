@@ -19,7 +19,11 @@ bool Mp4Repairer::shouldPreferChunkPrediction() {
 }
 
 void Mp4Repairer::pushBackLastChunk() {
-	if (mp4_.ctx_.scan_.last_track_idx_ >= 0) mp4_.tracks_[mp4_.ctx_.scan_.last_track_idx_].pushBackLastChunk();
+	if (mp4_.ctx_.scan_.last_track_idx_ < 0) return;
+	auto &t = mp4_.tracks_[mp4_.ctx_.scan_.last_track_idx_];
+	if (t.is_dummy_ && t.current_chunk_.n_samples_ && t.current_chunk_.size_)
+		mp4_.addUnknownSequence(t.current_chunk_.off_, t.current_chunk_.size_);
+	t.finalizeCurrentChunk();
 }
 
 void Mp4Repairer::onNewChunkStarted(int new_track_idx) {

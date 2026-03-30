@@ -19,6 +19,7 @@
 														*/
 
 #pragma once
+#include <functional>
 #include <iomanip> // setw
 #include <vector>
 
@@ -69,7 +70,7 @@ class Track : public HasHeaderAtom {
 	void getChunkOffsets();
 	void parseSampleToChunk();
 	void getCompositionOffsets();
-	void genPatternPerm();
+	void genPatternPerm(int twos_track_idx, std::function<std::string(uint)> get_codec_name = nullptr);
 
 	void saveSampleTimes();
 	void saveKeyframes();
@@ -147,17 +148,19 @@ class Track : public HasHeaderAtom {
 	bool chunkProbablyAtAnd();
 
 	void printStats();
-	void printDynPatterns(bool show_percentage = false);
+	// Prints dynamic patterns. When show_percentage is true, transition_count and get_codec_name
+	// must be provided to display counts and names; otherwise they are optional.
+	void printDynPatterns(bool show_percentage = false, std::function<size_t(int, int)> transition_count = nullptr,
+	                      std::function<std::string(uint)> get_codec_name = nullptr);
 	void genLikely();
 	bool isSupported() { return codec_.isSupported() || is_tmcd_hardcoded_; }
 	bool hasZeroTransitions();
 
-	int useDynPatterns(off_t offset);
 	void genChunkSizes();
 
-	void pushBackLastChunk();
-	bool doesMatchTransition(const uchar *buff, int track_idx);
-
+	// Appends current_chunk_ to chunks_ and resets it. For dummy tracks the caller
+	// is responsible for calling Mp4::addUnknownSequence() first when n_samples_ > 0.
+	void finalizeCurrentChunk();
 	void applyExcludedToOffs();
 
 	std::vector<int> orig_comp_offs_; // from ctts
@@ -165,17 +168,17 @@ class Track : public HasHeaderAtom {
 	bool chunkReachedSampleLimit();
 	int has_duplicates_ = false;
 
-	Mp4 *mp4_ = nullptr; // back-pointer set by Mp4::afterTrackRealloc()
+	off_t mdat_content_start_ = 0; // absolute file offset of mdat content start; set by findMdat()
+
+	// set by genPatternPerm; accessed by Mp4::useDynPatternsForTrack
+	std::vector<uint> dyn_patterns_perm_;
+	int use_looks_like_twos_idx_ = -1;
 
   private:
 	// from healthy file
 	std::vector<int> orig_sizes_;
 	std::vector<int> orig_times_;
 	std::vector<std::pair<int, int>> orig_ctts_;
-
-	std::vector<uint> dyn_patterns_perm_;
-
-	int use_looks_like_twos_idx_ = -1;
 
 	uint ownTrackIdx();
 	void calcAvgSampleSize();

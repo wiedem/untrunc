@@ -12,6 +12,8 @@ void test_slice_info();
 void test_mp4_scan();
 void test_repairer();
 void test_hvc1();
+void test_track_scanner();
+void test_codec_callbacks();
 
 int main() {
 	test_bitreader();
@@ -22,6 +24,8 @@ int main() {
 	test_mp4_scan();
 	test_repairer();
 	test_hvc1();
+	test_track_scanner();
+	test_codec_callbacks();
 
 	int total = g_tests_passed + g_tests_failed;
 	std::cout << "\n" << g_tests_passed << "/" << total << " tests passed";

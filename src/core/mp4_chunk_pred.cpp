@@ -385,7 +385,7 @@ bool Mp4::currentChunkFinished(int add_extra) {
 
 int Mp4::getNextTrackViaDynPatterns(off_t offset) {
 	int last_idx = ctx_.scan_.done_padding_ && idx_free_ >= 0 ? idx_free_ : ctx_.scan_.last_track_idx_;
-	auto track_idx = tracks_[last_idx].useDynPatterns(offset);
+	auto track_idx = useDynPatternsForTrack(last_idx, offset);
 	logg(V, "'", getCodecName(last_idx), "'.useDynPatterns() -> track_idx=", track_idx, "\n");
 	return track_idx;
 }

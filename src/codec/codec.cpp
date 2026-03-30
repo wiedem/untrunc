@@ -18,7 +18,7 @@ extern "C" {
 #include "avc1/avc-config.h"
 #include "hvc1/hvc-config.h"
 #include "hvc1/hvc1.h"
-#include "core/mp4.h"
+#include "track/track.h"
 
 using namespace std;
 
@@ -41,7 +41,8 @@ Codec::Codec(Codec &&o) noexcept
       hvc_config_(std::move(o.hvc_config_)), was_keyframe_(o.was_keyframe_), was_bad_(o.was_bad_),
       audio_duration_(o.audio_duration_), should_dump_(o.should_dump_), chk_for_twos_(o.chk_for_twos_),
       strictness_lvl_(o.strictness_lvl_), cur_off_(o.cur_off_), ss_stats_(o.ss_stats_), track_idx_(o.track_idx_),
-      fdsc_pkt_idx_(o.fdsc_pkt_idx_), mp4_(o.mp4_), decode_packet_(std::exchange(o.decode_packet_, nullptr)),
+      fdsc_pkt_idx_(o.fdsc_pkt_idx_), track_(o.track_), load_after_fn_(std::move(o.load_after_fn_)),
+      find_size_fn_(std::move(o.find_size_fn_)), decode_packet_(std::exchange(o.decode_packet_, nullptr)),
       decode_frame_(std::exchange(o.decode_frame_, nullptr)), match_fn_(o.match_fn_),
       match_strict_fn_(o.match_strict_fn_), get_size_fn_(o.get_size_fn_) {}
 
@@ -63,7 +64,9 @@ Codec &Codec::operator=(Codec &&o) noexcept {
 		cur_off_ = o.cur_off_;
 		ss_stats_ = o.ss_stats_;
 		track_idx_ = o.track_idx_;
-		mp4_ = o.mp4_;
+		track_ = o.track_;
+		load_after_fn_ = std::move(o.load_after_fn_);
+		find_size_fn_ = std::move(o.find_size_fn_);
 		match_fn_ = o.match_fn_;
 		match_strict_fn_ = o.match_strict_fn_;
 		get_size_fn_ = o.get_size_fn_;
@@ -110,16 +113,13 @@ void Codec::initOnce() {
 }
 
 Track *Codec::getTrack() {
-	assertt(track_idx_ >= 0, track_idx_);
-	auto r = &mp4_->tracks_[track_idx_];
-	assertt(r->codec_.name_ == name_, track_idx_, r->codec_.name_, name_);
-	return r;
+	assertt(track_ != nullptr, track_idx_);
+	return track_;
 }
 
 void Codec::onTrackRealloc(int track_idx) {
 	track_idx_ = track_idx;
-	auto t = getTrack();
-	ss_stats_ = &t->ss_stats_; // hopefully Track t does not reallocate anymore
+	ss_stats_ = &track_->ss_stats_; // track_ is already set by afterTrackRealloc before this is called
 }
 
 void Codec::parseOk(Atom *trak) {
@@ -544,7 +544,8 @@ map<string, int(*) (Codec*, const uchar*, uint maxlength)> dispatch_get_size {
 				if (string((char*)pos, 2) == "GP") return pos-start;
 			}
 		}
-		else if (self->fdsc_pkt_idx_ == 1) return self->mp4_->getTrack("fdsc").getOrigSize(1);  // probably 152 ?
+		else if (self->fdsc_pkt_idx_ == 1)
+			return self->track_->getOrigSize(1); // self->track_ is always the fdsc track (dispatch_get_size matches by name), probably 152
 		return 16;
 	}},
 	GET_SZ_FN("gpmd") {  // GoPro meta data, see 'gopro/gpmf-parser'
@@ -667,5 +668,5 @@ bool Codec::needsDynStatsForSizing() {
 }
 
 const uchar *Codec::loadAfter(off_t length) {
-	return mp4_->loadFragment(cur_off_ + length, false);
+	return load_after_fn_(cur_off_ + length);
 }

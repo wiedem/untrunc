@@ -36,7 +36,6 @@ extern "C" {
 }
 
 #include "atom/atom.h"
-#include "core/mp4.h"
 
 using namespace std;
 
@@ -319,8 +318,6 @@ void Track::printStats() {
 		cout << "\nlikely sample_sizes (p=" << likely_samples_sizes_p << "): ";
 		for (uint i = 0; i < min(to_size_t(100), likely_sample_sizes_.size()); i++)
 			cout << likely_sample_sizes_[i] << ' ';
-
-		printDynPatterns(true);
 	}
 
 	cout << "\n";
@@ -374,7 +371,7 @@ void Track::parseSampleToChunk() {
 	}
 }
 
-void Track::genPatternPerm() {
+void Track::genPatternPerm(int twos_track_idx, std::function<std::string(uint)> get_codec_name) {
 	using tuple_t = tuple<int, double, int>;
 	vector<tuple_t> perm;
 	logg(V, "genPatternPerm of: ", codec_.name_, "\n");
@@ -391,8 +388,9 @@ void Track::genPatternPerm() {
 				max_size = distinct.size();
 			}
 		}
-		if (i == to_uint(mp4_->twos_track_idx_)) has_twos_transition = true;
-		logg(V, i, " ", mp4_->getCodecName(i), " ", max_e, " ", max_size, "\n");
+		if (i == to_uint(twos_track_idx)) has_twos_transition = true;
+		auto name = get_codec_name ? get_codec_name(i) : std::to_string(i);
+		logg(V, i, " ", name, " ", max_e, " ", max_size, "\n");
 		perm.emplace_back(i, max_e, max_size);
 	}
 
@@ -405,7 +403,7 @@ void Track::genPatternPerm() {
 		if (get<1>(perm[i]) < 2) {
 			use_looks_like_twos_idx_ = i;
 			break;
-		} else if (get<0>(perm[i]) == mp4_->twos_track_idx_)
+		} else if (get<0>(perm[i]) == twos_track_idx)
 			break;
 	}
 
@@ -418,7 +416,7 @@ bool Track::hasZeroTransitions() {
 	vector<uchar> b(4, 0x00);
 	for (auto &l : dyn_patterns_)
 		for (auto &p : l) {
-			if (p.hasPattern(Mp4::pat_size_ / 2, b)) return true;
+			if (p.hasPattern(kPatternSize / 2, b)) return true;
 		}
 	return false;
 }
@@ -589,7 +587,7 @@ bool Track::shouldUseChunkPrediction() {
 }
 
 bool Track::isChunkOffsetOk(off_t off) {
-	if (mp4_->toAbsOff(off) % start_off_gcd_ != 0) return false;
+	if ((mdat_content_start_ + off) % start_off_gcd_ != 0) return false;
 
 	if (!current_chunk_.off_) return true;
 	return (off - current_chunk_.off_) % chunk_distance_gcd_ == 0;
@@ -598,7 +596,7 @@ bool Track::isChunkOffsetOk(off_t off) {
 int64_t Track::stepToNextOwnChunk(off_t off) {
 	auto step = chunk_distance_gcd_ - ((off - current_chunk_.off_) % chunk_distance_gcd_);
 	if (!current_chunk_.off_) {
-		auto abs_off = mp4_->toAbsOff(off);
+		auto abs_off = mdat_content_start_ + off;
 		auto step_abs = chunk_distance_gcd_ - ((abs_off - current_chunk_.off_) % chunk_distance_gcd_);
 		step = min(step, step_abs);
 	}
@@ -609,7 +607,7 @@ int64_t Track::stepToNextOwnChunk(off_t off) {
 
 int64_t Track::stepToNextOwnChunkAbs(off_t off) {
 	if (start_off_gcd_ <= 1) return 0;
-	auto abs_off = mp4_->toAbsOff(off);
+	auto abs_off = mdat_content_start_ + off;
 	auto step = (start_off_gcd_ - (abs_off % start_off_gcd_)) % start_off_gcd_;
 
 	logg(V, __func__, "(", off, "): from: ", codec_.name_, " step: ", step, "\n");
@@ -619,7 +617,7 @@ int64_t Track::stepToNextOwnChunkAbs(off_t off) {
 // currently only used for the (dummy) "free" or "jpeg" tracks
 int64_t Track::stepToNextOtherChunk(off_t off) {
 	if (end_off_gcd_ <= 1) return 0;
-	auto abs_off = mp4_->toAbsOff(off);
+	auto abs_off = mdat_content_start_ + off;
 	auto step = end_off_gcd_ - (abs_off % end_off_gcd_);
 
 	if (!is_dummy_) { // jpeg
@@ -643,7 +641,8 @@ bool Track::chunkReachedSampleLimit() {
 	return current_chunk_.n_samples_ == likely_n_samples_[0];
 }
 
-void Track::printDynPatterns(bool show_percentage) {
+void Track::printDynPatterns(bool show_percentage, std::function<size_t(int, int)> transition_count,
+                             std::function<std::string(uint)> get_codec_name) {
 	int sum = 0;
 	for (auto &v : dyn_patterns_)
 		sum += v.size();
@@ -652,10 +651,11 @@ void Track::printDynPatterns(bool show_percentage) {
 	auto own_idx = ownTrackIdx();
 	for (uint j = 0; j < dyn_patterns_perm_.size(); j++) {
 		auto idx = dyn_patterns_perm_[j];
-		auto n_total = show_percentage ? mp4_->chunk_transitions_[{own_idx, idx}].size() : 0;
+		auto n_total = (show_percentage && transition_count) ? transition_count(own_idx, idx) : 0;
 		if (own_idx == idx && !n_total) continue;
-		cout << ss(codec_.name_, "_", mp4_->getCodecName(idx), " (", own_idx, "->", idx, ") [",
-		           dyn_patterns_[idx].size(), "]", (show_percentage ? ss(" (", n_total, ")") : ""), "\n");
+		auto name = get_codec_name ? get_codec_name(idx) : std::to_string(idx);
+		cout << ss(codec_.name_, "_", name, " (", own_idx, "->", idx, ") [", dyn_patterns_[idx].size(), "]",
+		           (show_percentage ? ss(" (", n_total, ")") : ""), "\n");
 		for (auto &p : dyn_patterns_[idx]) {
 			if (n_total) cout << ss(fixed, setprecision(3), p.successRate(), " ", p.cnt_, " ");
 			cout << p << '\n';
@@ -733,22 +733,6 @@ void Track::genLikely() {
 	}
 }
 
-int Track::useDynPatterns(off_t offset) {
-	auto buff = mp4_->getBuffAround(offset, Mp4::pat_size_);
-	if (!buff) return -1;
-
-	for (uint i = 0; i < dyn_patterns_perm_.size(); i++) {
-		if (i == to_uint(use_looks_like_twos_idx_) && Codec::looksLikeTwosOrSowt(buff + Mp4::pat_size_ / 2)) {
-			logg(V, "looksLikeTwos: ", codec_.name_, "_", mp4_->getCodecName(mp4_->twos_track_idx_), "\n");
-			return mp4_->twos_track_idx_;
-		}
-		auto idx = dyn_patterns_perm_[i];
-		if (!mp4_->tracks_[idx].isChunkOffsetOk(offset)) continue;
-		if (doesMatchTransition(buff, idx)) return idx;
-	}
-	return -1;
-}
-
 void Track::mergeChunks() {
 	vector<Track::Chunk> orig_chunks;
 	swap(orig_chunks, chunks_);
@@ -813,42 +797,14 @@ void Track::genChunkSizes() {
 	}
 }
 
-void Track::pushBackLastChunk() {
-	if (!current_chunk_.n_samples_ && is_dummy_) return; // dummyIsSkippable -> chkOffset -> pushBackLastChunk
+void Track::finalizeCurrentChunk() {
+	if (!current_chunk_.n_samples_ && is_dummy_) return; // dummyIsSkippable -> chkOffset -> finalizeCurrentChunk
 	assertt(current_chunk_.n_samples_);
-
-	if (is_dummy_ && current_chunk_.size_) mp4_->addUnknownSequence(current_chunk_.off_, current_chunk_.size_);
 
 	chunks_.emplace_back(current_chunk_);
 	current_chunk_.n_samples_ = 0;
 	current_chunk_.size_ = 0;
 	// keep current_chunk_.off_ for stepToNextChunkOff()
-}
-
-bool Track::doesMatchTransition(const uchar *buff, int track_idx) {
-	//	logg(V, codec_.name_, "_", mp4_->getCodecName(track_idx), '\n');
-
-	for (auto &p : dyn_patterns_[track_idx]) {
-		//		if (g_options.log_mode >= LogMode::V) {
-		//			printBuffer(buff, Mp4::pat_size_);
-		//			cout << p << '\n';
-		//		}
-		if (p.doesMatch(buff)) {
-			return true;
-		}
-	}
-
-	auto anyTrackMatches = [&](const uchar *start) {
-		for (auto &t : mp4_->tracks_)
-			if (t.codec_.matchSample(start)) return true;
-		return false;
-	};
-	if (has_unclear_transition_[track_idx] && !anyTrackMatches(buff + Mp4::pat_size_ / 2)) {
-		logg(V, "inverted chunk match: ", codec_.name_, "_", mp4_->getCodecName(track_idx), "\n");
-		return true;
-	}
-
-	return false;
 }
 
 void Track::applyExcludedToOffs() {
@@ -857,7 +813,6 @@ void Track::applyExcludedToOffs() {
 }
 
 uint Track::ownTrackIdx() {
-	// return mp4_->getTrackIdx(codec_.name_);
 	return codec_.track_idx_;
 }
 

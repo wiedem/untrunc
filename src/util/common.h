@@ -33,6 +33,10 @@ template <typename T> inline uint64_t to_uint64(T a) {
 
 const int64_t kRangeUnset = std::numeric_limits<int64_t>::min();
 
+// Size of the byte buffer used for dynamic transition pattern matching.
+// Patterns cover this many bytes centered around a chunk boundary.
+constexpr int kPatternSize = 32;
+
 struct Options {
 	LogMode log_mode = LogMode::I;
 	uint max_partsize_default = 1u << 23; // 8MiB

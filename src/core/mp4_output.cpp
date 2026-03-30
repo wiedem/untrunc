@@ -48,6 +48,15 @@ void Mp4::printAtoms() {
 void Mp4::printTrackStats() {
 	for (auto &t : tracks_) {
 		t.printStats();
+		if (g_options.use_chunk_stats) {
+			t.printDynPatterns(
+			    true,
+			    [this](int a, int b) -> size_t {
+				    auto it = chunk_transitions_.find({a, b});
+				    return it != chunk_transitions_.end() ? it->second.size() : 0;
+			    },
+			    [this](uint i) -> std::string { return getCodecName(i); });
+		}
 	}
 }
 
