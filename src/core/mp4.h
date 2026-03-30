@@ -24,6 +24,8 @@
 #include <stdio.h>
 #include <memory>
 
+#include "repair_report.h"
+#include "analyze_report.h"
 #include "util/common.h"
 #include "atom/header_atom.h"
 #include "track/track.h"
@@ -70,8 +72,8 @@ class Mp4 : public HasHeaderAtom {
 	void parseOk(const std::string &filename, bool accept_unhealthy = false);
 
 	// Repair & analysis
-	void repair(const std::string &filename);
-	void analyze(bool gen_off_map = false);
+	void repair(const std::string &filename, RepairReport &report);
+	void analyze(bool gen_off_map = false, AnalyzeReport *report = nullptr);
 	void analyzeOffset(const std::string &filename, off_t offset);
 	void dumpSamples();
 
@@ -220,16 +222,16 @@ class Mp4 : public HasHeaderAtom {
 
 	// --- Verification ---
 
-	void chkUntrunc(FrameInfo &fi, Codec &c, int i);
+	void chkUntrunc(FrameInfo &fi, Codec &c, int i, AnalyzeReport *report = nullptr);
 	std::map<off_t, FrameInfo> off_to_frame_;
 	std::map<off_t, Mp4::Chunk> off_to_chunk_;
 	void chkDetectionAtImpl(FrameInfo *detectedFramePtr, Mp4::Chunk *detectedChunkPtr, off_t off);
 	void chkFrameDetectionAt(FrameInfo &detected, off_t off);
 	void chkChunkDetectionAt(Mp4::Chunk &detected, off_t off);
-	void chkExpectedOff(off_t *expected_off, off_t real_off, uint sz, int idx);
-	void dumpMatch(const FrameInfo &fi, int idx, off_t *predicted_off = nullptr);
-	void dumpChunk(const Mp4::Chunk &chunk, int &idx, off_t *predicted_off = nullptr);
-	void dumpIdxAndOff(off_t off, int idx);
+	void chkExpectedOff(off_t *expected_off, off_t real_off, uint sz, int idx, std::ostream &out);
+	void dumpMatch(const FrameInfo &fi, int idx, off_t *expected_off = nullptr, std::ostream &out = std::cout);
+	void dumpChunk(const Mp4::Chunk &chunk, int &idx, off_t *expected_off = nullptr, std::ostream &out = std::cout);
+	void dumpIdxAndOff(off_t off, int idx, std::ostream &out = std::cout);
 	std::vector<FrameInfo> to_dump_;
 
 	// --- Output helpers ---

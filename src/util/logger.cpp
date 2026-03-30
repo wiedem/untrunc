@@ -22,13 +22,13 @@ class ConsoleLogger : public Logger {
   public:
 	void log(LogMode level, const std::string &msg) override {
 		if (level == I)
-			std::cout << "Info: ";
+			std::cerr << "Info: ";
 		else if (level == W || level == W2)
-			std::cout << "Warning: ";
+			std::cerr << "Warning: ";
 		else if (level <= E)
-			std::cout << "Error: ";
+			std::cerr << "Error: ";
 
-		std::cout << msg;
+		std::cerr << msg;
 
 		if (active_) cutNoise();
 
@@ -52,9 +52,9 @@ class ConsoleLogger : public Logger {
 		auto off = s.find_first_of('\n');
 		if (off != std::string::npos) s = s.substr(off);
 		if (total_omitted_) {
-			std::cout << "[[ " << total_omitted_ << " bytes omitted, next " << s.size() << " bytes were buffered ]]\n";
+			std::cerr << "[[ " << total_omitted_ << " bytes omitted, next " << s.size() << " bytes were buffered ]]\n";
 		}
-		std::cout << s;
+		std::cerr << s;
 		noise_buffer_.str("");
 		total_omitted_ = 0;
 	}

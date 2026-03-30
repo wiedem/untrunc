@@ -7,10 +7,11 @@
 #include <string>
 
 #include "mp4.h" // brings in all needed types
+#include "repair_report.h"
 
 class Mp4Repairer {
   public:
-	explicit Mp4Repairer(Mp4 &mp4);
+	Mp4Repairer(Mp4 &mp4, RepairReport &report);
 	void repair(const std::string &filename);
 
 	// Pure function: returns the sizes from `sizes` whose relative frequency
@@ -19,6 +20,7 @@ class Mp4Repairer {
 
   private:
 	Mp4 &mp4_;
+	RepairReport &report_;
 
 	// repair() phases
 	bool handleSpecialModes(const std::string &filename);

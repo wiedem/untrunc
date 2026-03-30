@@ -341,7 +341,7 @@ buffs_t DynStatsBuilder::offsToBuffs(const offs_t &offs, const string &load_pref
 		auto buff = cfg_.file.file_->getFragment(off - pat_size_ / 2, pat_size_);
 		buffs.emplace_back(buff, buff + pat_size_);
 	}
-	if (g_options.log_mode == I) cout << string(20, ' ') << '\r';
+	if (g_options.log_mode == I) cerr << string(20, ' ') << '\r';
 	return buffs;
 }
 

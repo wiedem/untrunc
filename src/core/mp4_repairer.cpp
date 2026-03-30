@@ -9,7 +9,7 @@
 
 using namespace std;
 
-Mp4Repairer::Mp4Repairer(Mp4 &mp4) : mp4_(mp4) {}
+Mp4Repairer::Mp4Repairer(Mp4 &mp4, RepairReport &report) : mp4_(mp4), report_(report) {}
 
 bool Mp4Repairer::shouldPreferChunkPrediction() {
 	return g_options.use_chunk_stats &&
@@ -220,7 +220,7 @@ BufferedAtom *Mp4Repairer::setupFile(const string &filename) {
 	// TODO: What about multiple mdat?
 	logg(V, "calling findMdat on truncated file..\n");
 	auto mdat = mp4_.findMdat(file_read);
-	logg(I, "reading mdat from truncated file ...\n");
+	logg(V, "reading mdat from truncated file ...\n");
 
 	if (file_read.length() > (1LL << 32)) {
 		mp4_.ctx_.file_.broken_is_64_ = true;
@@ -332,9 +332,35 @@ void Mp4Repairer::repair(const string &filename) {
 
 	if (g_options.muted) unmute();
 
+	if (mp4_.premature_end_)
+		report_.onPrematureEnd(mp4_.premature_percentage_);
+
+	if (!mp4_.ctx_.scan_.unknown_sequences_.empty()) {
+		std::vector<UnknownSeqDetail> seqs;
+		int64_t total_bytes = 0;
+		for (auto &[start, length] : mp4_.ctx_.scan_.unknown_sequences_) {
+			seqs.push_back({mp4_.offToStr(start), length});
+			total_bytes += length;
+		}
+		double pct = 100.0 * total_bytes / mdat->contentSize();
+		report_.onUnknownSequences(std::move(seqs), pct);
+	}
+
+	// Collect per-track stats before saveVideo may modify tracks
+	{
+		std::vector<TrackStat> stats;
+		for (const auto &t : mp4_.tracks_) {
+			if (t.is_dummy_) continue;
+			int64_t kf = t.keyframes_.size();
+			stats.push_back({t.codec_.name_, (int64_t)t.getNumSamples(), kf});
+		}
+		report_.onTrackStats(std::move(stats));
+	}
+
 	for (auto &track : mp4_.tracks_)
 		track.fixTimes();
 
 	auto filename_fixed = mp4_.getPathRepaired(mp4_.filename_ok_, filename);
+	report_.onOutputFile(filename_fixed);
 	mp4_.saveVideo(filename_fixed);
 }

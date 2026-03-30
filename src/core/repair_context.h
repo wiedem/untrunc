@@ -25,7 +25,7 @@ struct FileState {
 // Mutable state for the main scan loop.
 struct ScanState {
 	int64_t unknown_length_ = 0;
-	std::vector<int64_t> unknown_lengths_;
+	std::vector<std::pair<off_t, int64_t>> unknown_sequences_; // (start_offset, length)
 	std::vector<uint> atoms_skipped_;
 	uint64_t pkt_idx_ = 0;
 	int last_track_idx_ = -1;

@@ -1,7 +1,6 @@
 // Output methods for Mp4: printing info, saving video.
 
 #include <iostream>
-#include <iomanip>
 #include <fstream>
 
 extern "C" {
@@ -102,14 +101,14 @@ void Mp4::saveVideo(const string &filename) {
 
 	if (tracks_.back().is_dummy_) tracks_.pop_back();
 
-	if (g_options.log_mode >= I) {
-		cout << "Info: Found " << ctx_.scan_.pkt_idx_ << " packets ( ";
+	if (g_options.log_mode >= V) {
+		cerr << "Found " << ctx_.scan_.pkt_idx_ << " packets ( ";
 		for (const Track &t : tracks_) {
-			cout << t.codec_.name_ << ": " << t.getNumSamples() << ' ';
+			cerr << t.codec_.name_ << ": " << t.getNumSamples() << ' ';
 			if (contains({"avc1", "hvc1", "hev1"}, t.codec_.name_) || t.keyframes_.size())
-				cout << ss(t.codec_.name_, "-keyframes: ", t.keyframes_.size(), " ");
+				cerr << ss(t.codec_.name_, "-keyframes: ", t.keyframes_.size(), " ");
 		}
-		cout << ")\n";
+		cerr << ")\n";
 	}
 
 	chkStretchFactor();
@@ -141,7 +140,7 @@ void Mp4::saveVideo(const string &filename) {
 		string s_sec = (sec ? to_string(sec) + "s " : "");
 		string s_min = (min ? to_string(min) + "min " : "");
 		string s_hour = (hour ? to_string(hour) + "h " : "");
-		logg(I, "Duration of ", cn, ": ", s_hour, s_min, s_sec, s_msec, " (", bmsec, " ms)\n");
+		logg(V, "Duration of ", cn, ": ", s_hour, s_min, s_sec, s_msec, " (", bmsec, " ms)\n");
 	}
 
 	BufferedAtom *mdat = ctx_.file_.mdat_.release(); // transfer ownership to root_atom_ via replace()
@@ -149,14 +148,13 @@ void Mp4::saveVideo(const string &filename) {
 	root_atom_->replace(original_mdat, mdat); // replace() takes ownership of mdat, deletes original
 	//	Atom *mdat = root_atom_->atomByName("mdat");
 
-	if (ctx_.scan_.unknown_lengths_.size()) {
-		cout << setprecision(4);
+	if (g_options.log_mode >= V && ctx_.scan_.unknown_sequences_.size()) {
 		int64_t bytes_not_matched = 0;
-		for (auto n : ctx_.scan_.unknown_lengths_)
-			bytes_not_matched += n;
+		for (auto &[off, len] : ctx_.scan_.unknown_sequences_)
+			bytes_not_matched += len;
 		double percentage = (double)100 * bytes_not_matched / mdat->contentSize();
-		logg(W, "Unknown sequences: ", ctx_.scan_.unknown_lengths_.size(), '\n');
-		logg(W, "Bytes NOT matched: ", pretty_bytes(bytes_not_matched), " (", percentage, "%)\n");
+		logg(V, "Unknown sequences: ", ctx_.scan_.unknown_sequences_.size(), '\n');
+		logg(V, "Bytes NOT matched: ", pretty_bytes(bytes_not_matched), " (", percentage, "%)\n");
 	}
 
 	if (ctx_.scan_.atoms_skipped_.size()) {
@@ -204,8 +202,8 @@ void Mp4::saveVideo(const string &filename) {
 
 	if (g_options.dump_repaired) {
 		auto dst = filename + ".dump";
-		cout << '\n';
-		cout << "n_to_dump: " << to_dump_.size() << (to_dump_.size() ? "\n" : " (dumping all)\n");
+		cerr << '\n';
+		cerr << "n_to_dump: " << to_dump_.size() << (to_dump_.size() ? "\n" : " (dumping all)\n");
 		logg(I, "dumping to: '", dst, "'\n");
 		ofstream f_out(dst);
 		cout.rdbuf(f_out.rdbuf());
@@ -218,7 +216,7 @@ void Mp4::saveVideo(const string &filename) {
 	}
 
 	//save to file
-	logg(I, "saving ", filename, '\n');
+	logg(V, "saving ", filename, '\n');
 	FileWrite file(filename);
 
 	if (ftyp) ftyp->write(file);
@@ -253,7 +251,7 @@ bool Mp4::alreadyRepaired(const std::string &ok, const std::string &corrupt) {
 	if (!g_options.skip_existing) return false;
 	auto dst = getPathRepaired(ok, corrupt);
 	if (FileRead::alreadyExists(dst)) {
-		if (g_options.log_mode > E) cout << "exists: " << dst << '\n';
+		if (g_options.log_mode > E) cerr << "exists: " << dst << '\n';
 		return true;
 	}
 	return false;

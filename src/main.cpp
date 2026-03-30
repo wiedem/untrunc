@@ -25,6 +25,7 @@
 
 #include "core/mp4.h"
 #include "core/mp4_tools.h"
+#include "core/repair_report.h"
 #include "atom/atom.h"
 #include "util/common.h"
 
@@ -54,7 +55,7 @@ void usage() {
 	     << "-mp <bytes>  - set max partsize\n"
 	     << "\n"
 	     << "analyze options:\n"
-	     << "-a  - analyze\n"
+	     << "-a  - test codec detection accuracy (developer tool, not a file health check)\n"
 	     << "-i[t|a|s] - info [tracks|atoms|stats]\n"
 	     << "-d  - dump samples\n"
 	     << "-f  - find all atoms and check their lengths\n"
@@ -247,7 +248,7 @@ int main(int argc, char *argv[]) {
 
 	bool skip_info = find_atoms;
 	if (!skip_info) {
-		logg(I, g_version_str, '\n');
+		logg(V, g_version_str, '\n');
 	}
 
 	auto chkC = [&]() {
@@ -286,7 +287,7 @@ int main(int argc, char *argv[]) {
 		}
 		if (mp4.alreadyRepaired(ok, corrupt)) return 0;
 
-		logg(I, "reading ", ok, '\n');
+		logg(V, "reading ", ok, '\n');
 		mp4.parseOk(ok, (show_atoms || show_info));
 
 		if (show_tracks)
@@ -300,14 +301,25 @@ int main(int argc, char *argv[]) {
 			mp4.printMediaInfo();
 		else if (dump_samples)
 			mp4.dumpSamples();
-		else if (analyze)
-			mp4.analyze();
+		else if (analyze) {
+			AnalyzeReport report;
+			mp4.analyze(false, &report);
+			report.finish();
+			chkHiddenWarnings();
+			return report.exitCode();
+		}
 		else if (analyze_offset)
 			mp4.analyzeOffset(corrupt.empty() ? ok : corrupt, arg_offset);
-		else if (corrupt.size())
-			mp4.repair(corrupt);
+		else if (corrupt.size()) {
+			RepairReport report;
+			mp4.repair(corrupt, report);
+			report.finish();
+			chkHiddenWarnings();
+			return report.exitCode();
+		}
 	} catch (const std::exception &e) {
-		return cerr << e.what() << '\n', 1;
+		cerr << e.what() << '\n';
+		return 1;
 	}
 
 	chkHiddenWarnings();

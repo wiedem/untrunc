@@ -1,6 +1,5 @@
 #include "bitreader.h"
-
-#include <iostream>
+#include "common.h"
 
 int readGolomb(const uchar *&buffer, int &offset) {
 	// count the leading zeroes
@@ -13,7 +12,7 @@ int readGolomb(const uchar *&buffer, int &offset) {
 			offset = 0;
 		}
 		if (count > 20) {
-			std::cout << "Failed reading golomb: too large!\n";
+			logg(V, "Failed reading golomb: too large!\n");
 			return -1;
 		}
 	}

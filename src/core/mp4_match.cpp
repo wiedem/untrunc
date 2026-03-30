@@ -104,9 +104,7 @@ FrameInfo Mp4::predictSize(const uchar *start, int track_idx, off_t offset) {
 	}
 
 	if (c.was_bad_) {
-		logg(W, "Codec::was_bad_ = 1\n");
-		//			logg(V, "Codec::was_bad_ = 1 -> skipping\n");
-		//			continue;
+		logg(V, "Codec::was_bad_ = 1\n");
 	}
 
 	if (track.has_duplicates_ && !isExpectedTrackIdx(track_idx)) {
@@ -215,9 +213,9 @@ bool Mp4::anyPatternMatchesHalf(off_t offset, uint track_idx_to_try) {
 	for (auto &t : tracks_) {
 		for (auto &p : t.dyn_patterns_[track_idx_to_try]) {
 			if (g_options.log_mode >= V) {
-				cout << string(36, ' ');
+				cerr << string(36, ' ');
 				printBuffer(buff, Mp4::pat_size_);
-				cout << p << '\n';
+				cerr << p << '\n';
 			}
 			if (p.doesMatchHalf(buff)) return true;
 		}

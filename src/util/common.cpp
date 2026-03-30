@@ -43,7 +43,7 @@ uint64_t swap64(uint64_t ull) {
 }
 
 void printBuffer(const uchar *pos, int n) {
-	cout << mkHexStr(pos, n, 4) << '\n';
+	cerr << mkHexStr(pos, n, 4) << '\n';
 }
 
 string mkHexStr(const uchar *pos, int n, int seperate_each) {
@@ -61,7 +61,7 @@ string mkHexStr(const uchar *pos, int n, int seperate_each) {
 
 void hitEnterToContinue(bool new_line) {
 	if (g_options.interactive) {
-		cout << "  [[Hit enter to continue]]" << (new_line ? "\n" : "") << flush;
+		cerr << "  [[Hit enter to continue]]" << (new_line ? "\n" : "") << flush;
 		getchar();
 	}
 	//	else cout << '\n';
@@ -72,7 +72,7 @@ void outProgress(double now, double all, const string &prefix) {
 	if (g_options.on_progress)
 		g_options.on_progress(x / 10);
 	else
-		cout << prefix << x / 10 << "%  \r" << flush;
+		cerr << prefix << x / 10 << "%  \r" << flush;
 }
 
 void mute() {
@@ -82,12 +82,7 @@ void mute() {
 
 void unmute() {
 	g_options.muted = false;
-	if (g_options.log_mode <= E)
-		av_log_set_level(AV_LOG_QUIET);
-	else if (g_options.log_mode < V)
-		av_log_set_level(AV_LOG_WARNING);
-	else if (g_options.log_mode > V)
-		av_log_set_level(AV_LOG_DEBUG);
+	av_log_set_level(g_options.log_mode >= VV ? AV_LOG_DEBUG : AV_LOG_QUIET);
 	g_logger->disableNoiseSuppression();
 }
 
@@ -106,8 +101,8 @@ string pretty_bytes(double num) {
 
 void chkHiddenWarnings() {
 	if (g_num_w2 && g_options.log_mode >= W) {
-		cout << string(10, ' ') << '\n';
-		cout << g_num_w2 << " warnings were hidden!\n";
+		cerr << string(10, ' ') << '\n';
+		cerr << g_num_w2 << " warnings were hidden!\n";
 	}
 	g_num_w2 = 0;
 }

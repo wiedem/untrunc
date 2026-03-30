@@ -17,6 +17,8 @@ void test_codec_callbacks();
 void test_dyn_stats_builder();
 void test_h265_nal_types();
 void test_sample_stats();
+void test_repair_report();
+void test_analyze_report();
 
 int main() {
 	test_bitreader();
@@ -32,6 +34,8 @@ int main() {
 	test_dyn_stats_builder();
 	test_h265_nal_types();
 	test_sample_stats();
+	test_repair_report();
+	test_analyze_report();
 
 	int total = g_tests_passed + g_tests_failed;
 	std::cout << "\n" << g_tests_passed << "/" << total << " tests passed";

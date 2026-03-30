@@ -104,7 +104,7 @@ void Mp4::afterTrackRealloc() {
 void Mp4::addUnknownSequence(off_t start, uint64_t length) {
 	assertt(length);
 	addToExclude(start, length);
-	ctx_.scan_.unknown_lengths_.emplace_back(length);
+	ctx_.scan_.unknown_sequences_.emplace_back(start, length);
 }
 
 void Mp4::addToExclude(off_t start, uint64_t length, bool force) {
@@ -157,8 +157,9 @@ void Mp4::setLastTrackIdx(int track_idx) {
 bool Mp4::chkUnknownSequenceEnded(off_t offset) {
 	if (!ctx_.scan_.unknown_length_) return false;
 	g_logger->disableNoiseSuppression();
-	addToExclude(offset - ctx_.scan_.unknown_length_, ctx_.scan_.unknown_length_);
-	ctx_.scan_.unknown_lengths_.emplace_back(ctx_.scan_.unknown_length_);
+	off_t start = offset - ctx_.scan_.unknown_length_;
+	addToExclude(start, ctx_.scan_.unknown_length_);
+	ctx_.scan_.unknown_sequences_.emplace_back(start, ctx_.scan_.unknown_length_);
 	ctx_.scan_.unknown_length_ = 0;
 	return true;
 }
@@ -183,6 +184,6 @@ int Mp4::findSizeWithContinuation(off_t off, vector<int> sizes) {
 
 // Repair entry point
 
-void Mp4::repair(const string &filename) {
-	Mp4Repairer(*this).repair(filename);
+void Mp4::repair(const string &filename, RepairReport &report) {
+	Mp4Repairer(*this, report).repair(filename);
 }

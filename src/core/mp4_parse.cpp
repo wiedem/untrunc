@@ -70,14 +70,14 @@ void Mp4::parseHealthy() {
 		getTrack("avc1").codec_.chk_for_twos_ = true;
 	}
 
-	if (g_options.log_mode >= LogMode::I) cout << '\n';
+	if (g_options.log_mode >= LogMode::V) cerr << '\n';
 }
 
 void Mp4::parseOk(const string &filename, bool accept_unhealthy) {
 	filename_ok_ = filename;
 	auto &file = openFile(filename);
 
-	logg(I, "parsing healthy moov atom ... \n");
+	logg(V, "parsing healthy moov atom ... \n");
 	root_atom_ = std::make_unique<Atom>();
 	while (true) {
 		auto atom = std::make_unique<Atom>();
@@ -92,10 +92,10 @@ void Mp4::parseOk(const string &filename, bool accept_unhealthy) {
 	}
 
 	if (root_atom_->atomByName("ctts"))
-		cerr << "Composition time offset atom found. Out of order samples possible." << endl;
+		logg(V, "Composition time offset atom found. Out of order samples possible.\n");
 
 	if (root_atom_->atomByName("sdtp"))
-		cerr << "Sample dependency flag atom found. I and P frames might need to recover that info." << endl;
+		logg(V, "Sample dependency flag atom found. I and P frames might need to recover that info.\n");
 
 	auto ftyp = root_atom_->atomByName("ftyp", true);
 	if (ftyp) {
@@ -187,7 +187,7 @@ void Mp4::chkStretchFactor() {
 	double eps = 0.1;
 	if (fabs(factor - 1) > eps) {
 		if (!g_options.stretch_video)
-			cout << "Tip: Audio and video seem to have different durations (" << factor << ").\n"
+			cerr << "Tip: Audio and video seem to have different durations (" << factor << ").\n"
 			     << "     If audio and video are not in sync, give `-sv` a try. See `--help`\n";
 		else
 			for (Track &track : tracks_) {
