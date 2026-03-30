@@ -292,7 +292,10 @@ void Mp4Repairer::repair(const string &filename) {
 
 	off_t offset = calcStartOffset(mdat);
 
+	auto content_size = mdat->contentSize();
+
 	while (chkOffset(offset)) {
+		report_.onProgress(offset, content_size);
 		if (tryAll(offset)) continue;
 
 		if (!mp4_.ctx_.scan_.unknown_length_) {

@@ -91,9 +91,7 @@ bool Mp4::advanceOffset(off_t &offset, bool just_simulate) {
 
 		auto start = loadFragment(offset);
 
-		static uint loop_cnt = 0;
-		if (g_options.log_mode == I && loop_cnt++ % kProgressInterval == 0)
-			outProgress(offset, ctx_.file_.mdat_->file_end_);
+		// Progress is reported via RepairReport::onProgress() in the repair loop.
 
 		if ((skipped = skipZeros(offset, start))) {
 			if (padding > 0) { // we assume that if file uses padding, zeros might be part of payload

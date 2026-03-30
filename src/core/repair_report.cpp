@@ -6,6 +6,7 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <unistd.h>
 
 #include "util/common.h" // pretty_bytes
 
@@ -25,7 +26,10 @@ void RepairReport::onProgress(int64_t current, int64_t total) {
 	int64_t pct10 = (current * 1000) / total;
 	if (pct10 == last_progress_pct10_) return;
 	last_progress_pct10_ = pct10;
-	std::cerr << "  " << (pct10 / 10) << '.' << (pct10 % 10) << "%\r" << std::flush;
+	if (isatty(STDERR_FILENO))
+		std::cerr << "  " << (pct10 / 10) << '.' << (pct10 % 10) << "%\r" << std::flush;
+	else
+		std::cerr << "progress: " << (pct10 / 10) << '.' << (pct10 % 10) << '\n' << std::flush;
 }
 
 void RepairReport::onTrackStats(std::vector<TrackStat> stats) {
