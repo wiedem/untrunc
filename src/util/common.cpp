@@ -26,7 +26,7 @@ using namespace std;
 Options g_options;
 uint g_num_w2 = 0;
 
-std::string g_version_str = "version '" UNTR_VERSION "' using ffmpeg '" FFMPEG_VERSION "' " LIBAVCODEC_IDENT "";
+std::string g_version_str = "untrunc " UNTR_VERSION " (FFmpeg " FFMPEG_VERSION ")";
 
 uint16_t swap16(uint16_t us) {
 	return (us >> 8) | (us << 8);

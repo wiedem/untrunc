@@ -46,7 +46,9 @@ else
 	CXXFLAGS += -g
 endif
 
-VER = $(shell test -d .git && command -v git >/dev/null && echo "v`git rev-list --count HEAD`-`git describe --always --dirty --abbrev=7`")
+SEMVER   := $(shell cat VERSION 2>/dev/null || echo "0.0.0")
+GIT_HASH := $(shell test -d .git && command -v git >/dev/null && git describe --always --dirty --abbrev=7)
+VER      := $(SEMVER)$(if $(GIT_HASH),+$(GIT_HASH))
 CPPFLAGS += -MMD -MP
 CPPFLAGS += -DUNTR_VERSION=\"$(VER)\"
 USE_GCH := 0
@@ -71,7 +73,7 @@ $(shell mkdir -p $(DIR)/src/atom $(DIR)/src/codec/avc1 $(DIR)/src/codec/hvc1 $(D
 
 CURL := $(shell command -v curl 2>/dev/null)
 
-.PHONY: all clean force
+.PHONY: all clean force compile_flags.txt
 
 
 all: $(EXE)
@@ -133,6 +135,17 @@ endif
 clean:
 	$(RM) -r $(DIR)
 	$(RM) $(EXE)
+
+compile_flags.txt:
+	@{ \
+	  printf -- '-std=c++17\n'; \
+	  printf -- '-D_FILE_OFFSET_BITS=64\n'; \
+	  printf -- '-Isrc\n'; \
+	  printf -- '-Itests\n'; \
+	  printf -- '-DUNTR_VERSION="?"\n'; \
+	  pkg-config --cflags-only-I libavformat libavcodec libavutil 2>/dev/null | tr ' ' '\n' | grep -v '^$$'; \
+	} > $@
+	@echo "(info) generated $@"
 
 # Unit tests
 TEST_SRCS := $(wildcard tests/*.cpp)

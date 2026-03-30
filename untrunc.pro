@@ -14,7 +14,9 @@ CONFIG += debug
 
 CONFIG += object_parallel_to_source
 
-GIT_VERSION = $$system(echo "v`git rev-list --count HEAD`-`git describe --always --dirty --abbrev=7`")
+SEMVER = $$cat(VERSION)
+GIT_HASH = $$system(git describe --always --dirty --abbrev=7 2>/dev/null)
+GIT_VERSION = "$$SEMVER+$$GIT_HASH"
 DEFINES += UNTR_VERSION=\\\"$$GIT_VERSION\\\"
 
 TEMPLATE = app
