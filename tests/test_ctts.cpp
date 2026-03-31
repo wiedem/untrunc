@@ -8,7 +8,8 @@ using P = std::pair<int, int>;
 
 static int totalSamples(const std::vector<P> &ctts) {
 	int n = 0;
-	for (auto &p : ctts) n += p.first;
+	for (auto &p : ctts)
+		n += p.first;
 	return n;
 }
 

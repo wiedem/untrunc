@@ -195,10 +195,11 @@ int parseByteStr(string &s) {
 	return f * stoi(s);
 }
 
-void parseMaxPartsize(string &s) {
+void parseMaxPartsize(const string &s) {
 	g_options.max_partsize_default = 0; // disable default
 	if (s == "f") return;               // just force dynamic max_partsize, no default
-	g_options.max_partsize = parseByteStr(s);
+	auto copy = s;
+	g_options.max_partsize = parseByteStr(copy);
 }
 
 #ifdef _WIN32

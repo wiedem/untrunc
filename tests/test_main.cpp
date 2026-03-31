@@ -21,6 +21,7 @@ void test_repair_report();
 void test_analyze_report();
 void test_avc_config();
 void test_expand_ctts();
+void test_parse_byte_str();
 
 int main() {
 	test_bitreader();
@@ -40,6 +41,7 @@ int main() {
 	test_analyze_report();
 	test_avc_config();
 	test_expand_ctts();
+	test_parse_byte_str();
 
 	int total = g_tests_passed + g_tests_failed;
 	std::cout << "\n" << g_tests_passed << "/" << total << " tests passed";

@@ -208,7 +208,7 @@ void warnIfAlreadyExists(const std::string &);
 bool isAllZeros(const uchar *buf, int n);
 
 int parseByteStr(std::string &s);
-void parseMaxPartsize(std::string &s);
+void parseMaxPartsize(const std::string &s);
 
 #ifdef _WIN32
 void argv_as_utf8(int argc, char *argv[]);

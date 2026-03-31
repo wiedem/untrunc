@@ -22,6 +22,7 @@
 #include <string>
 
 #include "libavutil/ffversion.h"
+#include "cxxopts.hpp"
 
 #include "core/mp4.h"
 #include "core/mp4_tools.h"
@@ -30,58 +31,6 @@
 #include "util/common.h"
 
 using namespace std;
-
-void usage() {
-	cerr << "Usage: untrunc [options] <ok.mp4> [corrupt.mp4]\n"
-	     << "\ngeneral options:\n"
-	     << "-V  - version\n"
-	     << "-n  - no interactive\n" // in Mp4::analyze()
-	     << "\n"
-	     << "repair options:\n"
-	     << "-s  - step through unknown sequences\n"
-	     << "-st <step_size> - used with '-s'\n"
-	     << "-sv - stretches video to match audio duration (beta)\n"
-	     << "-rsv-ben - RSV file recovery (Sony recording-in-progress files)\n"
-	     << "-dw - don't write _fixed.mp4\n"
-	     << "-dr - dump repaired tracks, implies '-dw'\n"
-	     << "-k  - keep unknown sequences\n"
-	     << "-sm  - search mdat, even if no mp4-structure found\n"
-	     << "-dcc  - dont check if chunks are inside mdat\n"
-	     << "-dyn  - use dynamic stats\n"
-	     << "-range <A:B>  - raw data range\n"
-	     << "-dst <dir|file>  - set destination\n"
-	     << "-skip  - skip existing\n"
-	     << "-noctts  - dont restore ctts\n"
-	     << "-noedts  - dont restore edit lists\n"
-	     << "-mp <bytes>  - set max partsize\n"
-	     << "\n"
-	     << "analyze options:\n"
-	     << "-a  - test codec detection accuracy (developer tool, not a file health check)\n"
-	     << "-i[t|a|s] - info [tracks|atoms|stats]\n"
-	     << "-d  - dump samples\n"
-	     << "-f  - find all atoms and check their lengths\n"
-	     << "-lsm - find all mdat,moov atoms\n"
-	     << "-m <offset> - match/analyze file offset\n"
-	     << "untrunc <ok.mp4> <ok.mp4> - report wrong values\n"
-	     << "\n"
-	     << "other options:\n"
-	     << "-ms  - make streamable\n"
-	     << "-sh  - shorten\n"
-	     << "-u <mdat-file> <moov-file> - unite fragments\n"
-	     << "\n"
-	     << "logging options:\n"
-	     << "-q  - quiet, only errors\n"
-	     << "-w  - show hidden warnings\n"
-	     << "-v  - verbose\n"
-	     << "-vv - more verbose\n"
-	     << "-do - don't omit potential noise\n";
-	exit(-1);
-}
-
-void printVersion() {
-	cout << g_version_str << '\n';
-	exit(0);
-}
 
 void parseRange(const string &s) {
 	auto pos = s.find(":");
@@ -93,173 +42,185 @@ void parseRange(const string &s) {
 }
 
 int main(int argc, char *argv[]) {
-	const int kExpectArg = -22;
-	bool show_info = false;
-	bool show_tracks = false;
-	bool show_atoms = false;
-	bool show_stats = false;
-	bool analyze = false;
-	bool find_atoms = false;
-	bool dump_samples = false;
-	bool analyze_offset = false;
-	bool make_streamable = false;
-	bool unite = false;
-	bool listm = false;
-	bool shorten = false;
-	bool force_shorten = false;
-	off_t arg_offset = -1;
-	int arg_step = -1;
-	int arg_range = -1;
-	int arg_dst = -1;
-	int arg_mp = -1;
-
 	argv_as_utf8(argc, argv);
 
-	int i = 1;
-	for (; i < argc; i++) {
-		string arg = argv[i];
-		if (arg_offset == kExpectArg) {
-			arg_offset = stoll(arg);
-			continue;
-		}
-		if (arg_step == kExpectArg) {
-			arg_step = stoi(arg);
-			continue;
-		}
-		if (arg_range == kExpectArg) {
-			parseRange(arg);
-			arg_range = -1;
-			continue;
-		}
-		if (arg_dst == kExpectArg) {
-			g_options.dst_path = arg;
-			arg_dst = -1;
-			continue;
-		}
-		if (arg_mp == kExpectArg) {
-			parseMaxPartsize(arg);
-			arg_mp = -1;
-			continue;
-		}
-		if (arg == "--version") printVersion();
-		if (arg[0] == '-') {
-			auto a = arg.substr(1);
-			if (a == "i")
-				show_info = true;
-			else if (a == "it")
-				show_tracks = true;
-			else if (a == "ia")
-				show_atoms = true;
-			else if (a == "is")
-				show_stats = true;
-			else if (a == "sm")
-				g_options.search_mdat = true;
-			else if (a == "sv")
-				g_options.stretch_video = true;
-			else if (a == "st")
-				arg_step = kExpectArg;
-			else if (a == "sh")
-				shorten = true;
-			else if (a == "fsh")
-				force_shorten = shorten = true;
-			else if (a == "lsm")
-				listm = true;
-			else if (a == "s")
-				g_options.ignore_unknown = true;
-			else if (a == "k")
-				g_options.dont_exclude = true;
-			else if (a == "a")
-				analyze = true;
-			else if (a == "V")
-				printVersion();
-			else if (a == "vv")
-				g_options.log_mode = LogMode::VV;
-			else if (a == "v")
-				g_options.log_mode = LogMode::V;
-			else if (a == "w")
-				g_options.log_mode = LogMode::W2;
-			else if (a == "q")
-				g_options.log_mode = LogMode::E;
-			else if (a == "noctts")
-				g_options.no_ctts = true;
-			else if (a == "noedts")
-				g_options.no_edts = true;
-			else if (a == "n")
-				g_options.interactive = false;
-			else if (a == "f")
-				find_atoms = true;
-			else if (a == "do")
-				g_options.dont_omit = true;
-			else if (a == "dw")
-				g_options.dont_write = true;
-			else if (a == "dr")
-				g_options.dump_repaired = true;
-			else if (a == "d") {
-				dump_samples = true;
-				g_options.log_mode = LogMode::E;
-			} else if (a == "m") {
-				analyze_offset = true;
-				arg_offset = kExpectArg;
-				g_options.log_mode = LogMode::E;
-			} else if (a == "ms")
-				make_streamable = true;
-			else if (a == "u")
-				unite = true;
-			else if (a == "dcc")
-				g_options.ignore_out_of_bound_chunks = true;
-			else if (a == "dyn")
-				g_options.use_chunk_stats = true;
-			else if (a == "rsv-ben")
-				g_options.rsv_ben_mode = true;
-			else if (a == "range")
-				arg_range = kExpectArg;
-			else if (a == "dst")
-				arg_dst = kExpectArg;
-			else if (a == "skip")
-				g_options.skip_existing = true;
-			else if (a == "mp")
-				arg_mp = kExpectArg;
-			else if (a == "dec")
-				g_options.off_as_hex = false;
-			else if (a == "fa")
-				g_options.fast_assert = true;
-			else if (arg.size() > 2) {
-				cerr << "Error: seperate multiple options with space! See '-h'\n";
-				return -1;
-			} else
-				usage();
-		} else if (argc > i + 2)
-			usage(); // too many arguments
-		else
-			break;
+	cxxopts::Options options("untrunc", "Restore a truncated mp4/mov file");
+
+	// clang-format off
+	options.add_options("General")
+		("V,version", "Print version")
+		("n,no-interactive", "No interactive prompts")
+		("h,help", "Show help")
+	;
+
+	options.add_options("Repair")
+		("s,step", "Step through unknown sequences")
+		("step-size", "Step size (used with --step)", cxxopts::value<int>())
+		("stretch-video", "Stretch video to match audio duration (beta)")
+		("rsv-ben", "RSV file recovery (Sony recording-in-progress files)")
+		("dry-run", "Don't write _fixed.mp4")
+		("dump-repaired", "Dump repaired tracks")
+		("k,keep-unknown", "Keep unknown sequences")
+		("search-mdat", "Search mdat even if no mp4 structure found")
+		("ignore-oob-chunks", "Don't check if chunks are inside mdat")
+		("dynamic-stats", "Use dynamic stats")
+		("range", "Raw data range (A:B)", cxxopts::value<string>())
+		("o,output", "Set destination dir or file", cxxopts::value<string>())
+		("skip-existing", "Skip if output already exists")
+		("no-ctts", "Don't restore composition time offsets")
+		("no-edts", "Don't restore edit lists")
+		("max-part", "Max part size in bytes", cxxopts::value<string>())
+	;
+
+	options.add_options("Analyze")
+		("a,analyze", "Test codec detection accuracy (developer tool)")
+		("i,info", "Show info (tracks, atoms, stats)", cxxopts::value<string>()->implicit_value(""), "TYPE")
+		("d,dump", "Dump samples")
+		("f,find-atoms", "Find all atoms and check their lengths")
+		("list-mdat", "Find all mdat/moov atoms")
+		("m,match", "Analyze file offset", cxxopts::value<int64_t>())
+	;
+
+	options.add_options("Tools")
+		("make-streamable", "Move moov atom to front")
+		("shorten", "Shorten file to N megabytes", cxxopts::value<int>()->implicit_value("500"))
+		("force-shorten", "Force shorten even if moov might be lost")
+		("u,unite", "Unite mdat and moov fragments")
+	;
+
+	options.add_options("Logging")
+		("q,quiet", "Errors only")
+		("w,warnings", "Show hidden warnings")
+		("v,verbose", "Verbose (repeat for more: -v -v)")
+		("show-all-warnings", "Don't omit potential noise")
+		("decimal-offsets", "Show offsets as decimal")
+		("exit-on-error", "Exit immediately on first error")
+	;
+
+	options.add_options("Positional")
+		("ok-file", "", cxxopts::value<string>())
+		("corrupt-file", "", cxxopts::value<string>()->default_value(""))
+	;
+	// clang-format on
+
+	options.parse_positional({"ok-file", "corrupt-file"});
+	options.positional_help("<ok.mp4> [corrupt.mp4]");
+
+	cxxopts::ParseResult result;
+	try {
+		result = options.parse(argc, argv);
+	} catch (const cxxopts::exceptions::exception &e) {
+		cerr << "Error: " << e.what() << "\n";
+		return 1;
 	}
-	if (argc == i) usage(); // no filename given
 
-	string ok = argv[i++], corrupt;
-	if (i < argc) corrupt = argv[i++];
+	if (result.count("help")) {
+		cerr << options.help() << "\n";
+		return 0;
+	}
 
+	if (result.count("version")) {
+		cout << g_version_str << '\n';
+		return 0;
+	}
+
+	// Logging
+	if (result.count("quiet"))
+		g_options.log_mode = LogMode::E;
+	else if (result.count("warnings"))
+		g_options.log_mode = LogMode::W2;
+	else if (result.count("verbose")) {
+		auto v = result.count("verbose");
+		g_options.log_mode = v >= 2 ? LogMode::VV : LogMode::V;
+	}
+
+	// Repair options
+	if (result.count("step")) g_options.ignore_unknown = true;
+	if (result.count("keep-unknown")) g_options.dont_exclude = true;
+	if (result.count("stretch-video")) g_options.stretch_video = true;
+	if (result.count("rsv-ben")) g_options.rsv_ben_mode = true;
+	if (result.count("dry-run")) g_options.dont_write = true;
+	if (result.count("dump-repaired")) g_options.dump_repaired = true;
+	if (result.count("search-mdat")) g_options.search_mdat = true;
+	if (result.count("ignore-oob-chunks")) g_options.ignore_out_of_bound_chunks = true;
+	if (result.count("dynamic-stats")) g_options.use_chunk_stats = true;
+	if (result.count("skip-existing")) g_options.skip_existing = true;
+	if (result.count("no-ctts")) g_options.no_ctts = true;
+	if (result.count("no-edts")) g_options.no_edts = true;
+	if (result.count("no-interactive")) g_options.interactive = false;
+
+	if (result.count("output")) g_options.dst_path = result["output"].as<string>();
+	if (result.count("range")) parseRange(result["range"].as<string>());
+	if (result.count("max-part")) parseMaxPartsize(result["max-part"].as<string>());
+
+	// Logging detail options
+	if (result.count("show-all-warnings")) g_options.dont_omit = true;
+	if (result.count("decimal-offsets")) g_options.off_as_hex = false;
+	if (result.count("exit-on-error")) g_options.fast_assert = true;
+
+	// Positional args
+	if (!result.count("ok-file")) {
+		cerr << options.help() << "\n";
+		return 1;
+	}
+
+	string ok = result["ok-file"].as<string>();
+	string corrupt = result["corrupt-file"].as<string>();
+
+	// Mode flags
+	bool find_atoms_mode = result.count("find-atoms") > 0;
+	bool unite = result.count("unite") > 0;
+	bool shorten = result.count("shorten") > 0;
+	bool force_shorten = result.count("force-shorten") > 0;
+	bool listm = result.count("list-mdat") > 0;
+	bool make_streamable = result.count("make-streamable") > 0;
+	bool analyze = result.count("analyze") > 0;
+	bool dump_samples = result.count("dump") > 0;
+	bool analyze_offset = result.count("match") > 0;
+
+	// --info parsing
+	bool show_info = false, show_tracks = false, show_atoms = false, show_stats = false;
+	if (result.count("info")) {
+		auto val = result["info"].as<string>();
+		if (val == "tracks")
+			show_tracks = true;
+		else if (val == "atoms")
+			show_atoms = true;
+		else if (val == "stats")
+			show_stats = true;
+		else if (val.empty())
+			show_info = true;
+		else {
+			cerr << "Error: unknown --info type '" << val << "' (use: tracks, atoms, stats)\n";
+			return 1;
+		}
+	}
 	g_options.show_tracks = show_tracks || show_info;
 
-	if (!g_options.ignore_unknown && arg_step > 0) logg(ET, "setting step_size without using '-s'\n");
+	// These modes produce data on stdout, suppress non-error logging
+	if (dump_samples || analyze_offset) g_options.log_mode = LogMode::E;
 
-	// Check -rsv-ben incompatibilities
+	// Validation
+	int step_size = result.count("step-size") ? result["step-size"].as<int>() : -1;
+	if (!g_options.ignore_unknown && step_size > 0) logg(ET, "setting --step-size without using '--step'\n");
+
 	if (g_options.rsv_ben_mode) {
-		if (g_options.ignore_unknown) logg(ET, "'-rsv-ben' is not compatible with '-s'\n");
-		if (g_options.dont_exclude) logg(ET, "'-rsv-ben' is not compatible with '-k'\n");
-		if (g_options.use_chunk_stats) logg(ET, "'-rsv-ben' is not compatible with '-dyn'\n");
+		if (g_options.ignore_unknown) logg(ET, "'--rsv-ben' is not compatible with '--step'\n");
+		if (g_options.dont_exclude) logg(ET, "'--rsv-ben' is not compatible with '--keep-unknown'\n");
+		if (g_options.use_chunk_stats) logg(ET, "'--rsv-ben' is not compatible with '--dynamic-stats'\n");
 	}
 
-	bool skip_info = find_atoms;
+	bool skip_info = find_atoms_mode;
 	if (!skip_info) {
 		logg(V, g_version_str, '\n');
 	}
 
 	auto chkC = [&]() {
-		if (!corrupt.size()) logg(ET, "no second file specified\n");
+		if (corrupt.empty()) logg(ET, "no second file specified\n");
 	};
 
 	try {
-		if (find_atoms) {
+		if (find_atoms_mode) {
 			Atom::findAtomNames(ok);
 			return 0;
 		}
@@ -269,7 +230,7 @@ int main(int argc, char *argv[]) {
 			return 0;
 		}
 		if (shorten) {
-			Mp4Tools::shorten(ok, corrupt.size() ? stoi(corrupt) : 500, force_shorten);
+			Mp4Tools::shorten(ok, result["shorten"].as<int>(), force_shorten);
 			return 0;
 		}
 		if (listm) {
@@ -278,9 +239,9 @@ int main(int argc, char *argv[]) {
 		}
 
 		Mp4 mp4;
-		if (arg_step > 0) {
-			logg(I, "using step_size=", arg_step, "\n");
-			Mp4::step_ = arg_step;
+		if (step_size > 0) {
+			logg(I, "using step_size=", step_size, "\n");
+			Mp4::step_ = step_size;
 		}
 
 		auto ext = getMovExtension(ok);
@@ -310,10 +271,9 @@ int main(int argc, char *argv[]) {
 			report.finish();
 			chkHiddenWarnings();
 			return report.exitCode();
-		}
-		else if (analyze_offset)
-			mp4.analyzeOffset(corrupt.empty() ? ok : corrupt, arg_offset);
-		else if (corrupt.size()) {
+		} else if (analyze_offset)
+			mp4.analyzeOffset(corrupt.empty() ? ok : corrupt, static_cast<off_t>(result["match"].as<int64_t>()));
+		else if (!corrupt.empty()) {
 			RepairReport report;
 			mp4.repair(corrupt, report);
 			report.finish();

@@ -37,7 +37,7 @@ else
 endif
 
 CXXFLAGS += -std=c++17 -D_FILE_OFFSET_BITS=64
-CPPFLAGS += -Isrc
+CPPFLAGS += -Isrc -Ithird_party
 
 ifeq ($(IS_RELEASE), 1)
 	CXXFLAGS += -O3
