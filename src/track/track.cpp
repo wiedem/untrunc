@@ -39,6 +39,37 @@ extern "C" {
 
 using namespace std;
 
+vector<pair<int, int>> expandCtts(const vector<pair<int, int>> &pattern, size_t num_samples) {
+	vector<pair<int, int>> result;
+	if (pattern.empty() || !num_samples) return result;
+
+	for (size_t cnt = 0; cnt < num_samples;) {
+		for (auto &p : pattern) {
+			auto remaining = static_cast<int>(num_samples - cnt);
+			if (p.first >= remaining) {
+				result.emplace_back(remaining, p.second);
+				cnt = num_samples;
+				break;
+			}
+			result.emplace_back(p);
+			cnt += p.first;
+		}
+	}
+	return result;
+}
+
+void updateElstDuration(Atom *trak, int64_t track_duration) {
+	Atom *elst = trak->atomByName("elst");
+	if (!elst) return;
+
+	int version = elst->readInt(0) >> 24;
+	if (version == 1) {
+		elst->writeInt64(track_duration, 8);
+	} else {
+		elst->writeInt(static_cast<int>(track_duration), 4);
+	}
+}
+
 Track::Track(Atom *trak, AVCodecParameters *c, int ts) : trak_(trak), codec_(c), mp4_timescale_(ts) {}
 
 // dummy track
@@ -152,7 +183,10 @@ void Track::writeToAtoms(bool broken_is_64) {
 	editHeaderAtom();
 
 	Atom *tkhd = trak_->atomByName("tkhd");
-	HasHeaderAtom::editHeaderAtom(tkhd, getDurationInTimescale(), true);
+	auto duration_in_ts = getDurationInTimescale();
+	HasHeaderAtom::editHeaderAtom(tkhd, duration_in_ts, true);
+
+	updateElstDuration(trak_, duration_in_ts);
 
 	//Avc1 codec writes something inside stsd.
 	//In particular the picture parameter set (PPS) in avcC (after the sequence parameter set)
@@ -189,7 +223,7 @@ void Track::clear() {
 	num_samples_ = 0;
 	codec_.fdsc_pkt_idx_ = -1;
 
-	if (trak_) trak_->prune("edts");
+	if (trak_ && g_options.no_edts) trak_->prune("edts");
 }
 
 void Track::fixTimes() {
@@ -533,11 +567,14 @@ void Track::saveChunkOffsets() {
 
 void Track::saveCompositionOffsets() { // aka DisplayOffsets
 	if (orig_ctts_.size()) {
+		auto raw_ctts = orig_ctts_;
 		int orig_sz = orig_ctts_.size();
-		//		auto r = findOrder(orig_ctts_, true);
 		auto r = findOrder(orig_ctts_);
-		logg(V, "reduced origt_ctts_: ", orig_sz, " -> ", orig_ctts_.size(), '\n');
-		if (!r) logg(V, "ctts values seem unpredictable..\n");
+		logg(V, "reduced orig_ctts_: ", orig_sz, " -> ", orig_ctts_.size(), '\n');
+		if (!r) {
+			logg(V, "ctts pattern not repeating, using raw reference data\n");
+			if (orig_ctts_.empty()) orig_ctts_ = std::move(raw_ctts);
+		}
 	}
 
 	if (!orig_ctts_.size() || g_options.no_ctts) {
@@ -546,14 +583,7 @@ void Track::saveCompositionOffsets() { // aka DisplayOffsets
 		return;
 	}
 
-	vector<pair<int, int>> vp;
-	for (size_t cnt = 0; cnt < num_samples_;) {
-		for (auto p : orig_ctts_) {
-			vp.emplace_back(p);
-			cnt += p.first;
-			if (cnt >= num_samples_) break;
-		}
-	}
+	auto vp = expandCtts(orig_ctts_, num_samples_);
 
 	Atom *ctts = trak_->atomByNameSafe("ctts");
 

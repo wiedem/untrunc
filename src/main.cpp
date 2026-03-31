@@ -52,6 +52,7 @@ void usage() {
 	     << "-dst <dir|file>  - set destination\n"
 	     << "-skip  - skip existing\n"
 	     << "-noctts  - dont restore ctts\n"
+	     << "-noedts  - dont restore edit lists\n"
 	     << "-mp <bytes>  - set max partsize\n"
 	     << "\n"
 	     << "analyze options:\n"
@@ -181,6 +182,8 @@ int main(int argc, char *argv[]) {
 				g_options.log_mode = LogMode::E;
 			else if (a == "noctts")
 				g_options.no_ctts = true;
+			else if (a == "noedts")
+				g_options.no_edts = true;
 			else if (a == "n")
 				g_options.interactive = false;
 			else if (a == "f")

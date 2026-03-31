@@ -67,6 +67,7 @@ struct Options {
 	bool off_as_hex = true;
 	bool fast_assert = false;
 	bool no_ctts = false;
+	bool no_edts = false;
 	int64_t range_start = kRangeUnset;
 	int64_t range_end = kRangeUnset;
 	std::string dst_path;

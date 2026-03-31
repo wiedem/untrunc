@@ -190,6 +190,9 @@ class Track : public HasHeaderAtom {
 
 std::ostream &operator<<(std::ostream &out, const Track::Chunk &fi);
 
+std::vector<std::pair<int, int>> expandCtts(const std::vector<std::pair<int, int>> &pattern, size_t num_samples);
+void updateElstDuration(Atom *trak, int64_t track_duration);
+
 // Common base for chunks that carry a track index alongside the base chunk data.
 // Both Mp4::Chunk and ChunkIt::Chunk inherit from this to avoid duplicating track_idx_.
 struct IndexedChunk : Track::Chunk {
