@@ -2,7 +2,7 @@
 
 #include "iostream"
 
-#include "sps-info.h"
+#include "nal.h"
 #include "util/bitreader.h"
 #include "util/common.h"
 #include "atom/atom.h"
@@ -37,6 +37,42 @@ AvcConfig::AvcConfig(const Atom *stsd) {
 
 AvcConfig::~AvcConfig() = default;
 
+std::optional<AvcConfig> AvcConfig::fromAvcCPayload(const uchar *payload, int len) {
+	// avcC box payload layout (ISO 14496-15):
+	//   Byte 0: configurationVersion (must be 1)
+	//   Byte 1: AVCProfileIndication (= profile_idc)
+	//   Byte 2: profile_compatibility
+	//   Byte 3: AVCLevelIndication (= level_idc)
+	//   Byte 4: 0b111111xx (reserved | lengthSizeMinusOne)
+	if (len < 5) return std::nullopt;
+	if (payload[0] != 1) return std::nullopt;             // configurationVersion must be 1
+	if ((payload[4] & 0xFC) != 0xFC) return std::nullopt; // top 6 reserved bits must be 1
+	AvcConfig cfg;
+	cfg.is_ok = true;
+	cfg.profile_idc = payload[1];
+	cfg.level_idc = payload[3];
+	cfg.nal_length_size = (payload[4] & 0x03) + 1;
+	return cfg;
+}
+
+std::optional<SpsInfo> AvcConfig::findSpsInStream(const uchar *data, int size, int nal_length_size, int scan_limit) {
+	int remaining = std::min(size, scan_limit);
+	int offset = 0;
+	while (remaining > nal_length_size) {
+		NalInfo nal(data + offset, remaining, nal_length_size);
+		if (!nal.is_ok) break;
+		if (nal.nal_type_ == NAL_SPS && nal.data_) {
+			SpsInfo sps;
+			if (sps.decode(nal.data_)) return sps;
+			break;
+		}
+		if ((int)nal.length_ <= 0) break;
+		offset += nal.length_;
+		remaining -= nal.length_;
+	}
+	return std::nullopt;
+}
+
 bool AvcConfig::decode(const uchar *start) {
 	logg(V, "parsing avcC ...\n");
 	// Read lengthSizeMinusOne from byte 4 before readBits advances the pointer.
@@ -48,7 +84,11 @@ bool AvcConfig::decode(const uchar *start) {
 		logg(V, "avcC config version != 1\n");
 		return false;
 	}
-	start += 3; // skip profile, compatibility, level (readBits already consumed 1 byte)
+	// start now points to profile_idc (byte 1 of avcC box)
+	profile_idc = start[0];
+	// start[1] = profile_compatibility (not stored)
+	level_idc = start[2];
+	start += 3;                              // skip profile_idc, profile_compatibility, level_idc
 	uint reserved = readBits(3, start, off); // 111
 	if (reserved != 7) {
 		logg(V, "avcC - reserved is not reserved: ", reserved, '\n');

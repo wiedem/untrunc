@@ -14,6 +14,9 @@ class SpsInfo {
 	int poc_type = 0;
 	int log2_max_poc_lsb = 5;
 
+	int profile_idc = 0;
+	int level_idc = 0;
+
 	bool is_ok = false;
 	bool decode(const uchar *pos);
 };

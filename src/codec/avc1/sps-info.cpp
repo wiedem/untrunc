@@ -22,7 +22,10 @@ bool SpsInfo::decode(const uchar *pos) {
 	//	printBuffer(pos, 20);
 	logg(V, "decoding SPS ...\n");
 	int offset = 0;
-	pos += 3;                // skip 24 bits
+	profile_idc = pos[0];
+	// pos[1] = constraint_set_flags (not stored)
+	level_idc = pos[2];
+	pos += 3;                // skip profile_idc, constraint_flags, level_idc
 	readGolomb(pos, offset); // sps_id
 
 	int log2_max_frame_num_minus4 = readGolomb(pos, offset);

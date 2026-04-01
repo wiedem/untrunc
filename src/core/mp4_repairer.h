@@ -34,6 +34,8 @@ class Mp4Repairer {
 	void pushBackLastChunk();
 	void onNewChunkStarted(int new_track_idx);
 
+	void checkRefCompatibility();
+
 	bool chkOffset(off_t &offset);
 	void chkExcludeOverlap(off_t &start, int64_t &length);
 

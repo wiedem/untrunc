@@ -4,8 +4,13 @@
 #include <iostream>
 #include <iomanip>
 
+extern "C" {
+#include <libavcodec/avcodec.h>
+}
+
 #include "mp4_repairer.h"
 #include "rsv.h" // isPointingAtRtmdHeader, RsvRepairer
+#include "codec/avc1/avc-config.h"
 
 using namespace std;
 
@@ -275,6 +280,59 @@ off_t Mp4Repairer::calcStartOffset(BufferedAtom *mdat) {
 	return offset;
 }
 
+static std::string fmtH264Profile(int profile_idc) {
+	const char *name = avcodec_profile_name(AV_CODEC_ID_H264, profile_idc);
+	return name ? name : std::to_string(profile_idc);
+}
+
+static std::string fmtH264Level(int level_idc) {
+	return "L" + std::to_string(level_idc / 10) + "." + std::to_string(level_idc % 10);
+}
+
+void Mp4Repairer::checkRefCompatibility() {
+	for (const auto &t : mp4_.tracks_) {
+		if (t.codec_.name_ != "avc1") continue;
+		const AvcConfig *ref_cfg = t.codec_.avc_config_.get();
+		if (!ref_cfg || !ref_cfg->is_ok) continue;
+
+		// Scan the broken file's bytes for an avcC box. This works when the moov atom
+		// precedes the mdat (faststart format), which keeps the moov intact even if the
+		// mdat is truncated. Non-faststart files with a truncated moov cannot be checked.
+		FileRead &file = *mp4_.ctx_.file_.file_;
+		int scan_limit = (int)std::min(file.length(), (off_t)(128 << 10)); // 128 KB
+		if (scan_limit < 16) continue;
+		const uchar *data = file.getFragment(0, scan_limit);
+		if (!data) continue;
+
+		const uchar *avcc_payload = nullptr;
+		for (int i = 0; i + 8 < scan_limit; i++) {
+			if (data[i] == 'a' && data[i + 1] == 'v' && data[i + 2] == 'c' && data[i + 3] == 'C') {
+				avcc_payload = data + i + 4;
+				break;
+			}
+		}
+		auto broken_cfg = avcc_payload
+		                      ? AvcConfig::fromAvcCPayload(avcc_payload, scan_limit - (int)(avcc_payload - data))
+		                      : std::nullopt;
+
+		if (!broken_cfg) {
+			logg(V, "checkRefCompatibility: no avcC found in broken file\n");
+			continue;
+		}
+
+		if (broken_cfg->profile_idc == ref_cfg->profile_idc && broken_cfg->level_idc == ref_cfg->level_idc) continue;
+
+		auto *par = t.codec_.av_codec_params_;
+		string ref_res = par ? (std::to_string(par->width) + "x" + std::to_string(par->height) + " ") : "";
+		string ref_str =
+		    ref_res + "H.264 " + fmtH264Profile(ref_cfg->profile_idc) + " " + fmtH264Level(ref_cfg->level_idc);
+		string broken_str =
+		    "H.264 " + fmtH264Profile(broken_cfg->profile_idc) + " " + fmtH264Level(broken_cfg->level_idc);
+		logg(ET, "reference and broken file are incompatible (wrong reference file?):\n", "  reference:   ", ref_str,
+		     "\n", "  broken file: ", broken_str, "\n");
+	}
+}
+
 void Mp4Repairer::repair(const string &filename) {
 	if (handleSpecialModes(filename)) return;
 
@@ -284,6 +342,7 @@ void Mp4Repairer::repair(const string &filename) {
 
 	auto mdat = setupFile(filename);
 
+	checkRefCompatibility();
 	precomputeAudioSampleSizes();
 
 	mp4_.duration_ = 0;
@@ -335,8 +394,7 @@ void Mp4Repairer::repair(const string &filename) {
 
 	if (g_options.muted) unmute();
 
-	if (mp4_.premature_end_)
-		report_.onPrematureEnd(mp4_.premature_percentage_);
+	if (mp4_.premature_end_) report_.onPrematureEnd(mp4_.premature_percentage_);
 
 	if (!mp4_.ctx_.scan_.unknown_sequences_.empty()) {
 		std::vector<UnknownSeqDetail> seqs;
