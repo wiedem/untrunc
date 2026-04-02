@@ -4,6 +4,7 @@
 // generation live here; the rest stay in Mp4 private (accessible via friend).
 #pragma once
 
+#include <optional>
 #include <string>
 
 #include "mp4.h" // brings in all needed types
