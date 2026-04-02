@@ -77,8 +77,12 @@ void outProgress(double now, double all, const string &prefix) {
 	double x = round(1000 * (now / all));
 	if (g_options.on_progress)
 		g_options.on_progress(x / 10);
+	else if (isatty(STDERR_FILENO))
+		cerr << (prefix.empty() ? "" : prefix + ": ") << x / 10 << "%  \r" << flush;
+	else if (prefix.empty())
+		cerr << "progress: " << x / 10 << '\n' << flush;
 	else
-		cerr << prefix << x / 10 << "%  \r" << flush;
+		cerr << "progress[" << prefix << "]: " << x / 10 << '\n' << flush;
 }
 
 void mute() {

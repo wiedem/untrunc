@@ -211,7 +211,7 @@ void DynStatsBuilder::genDynPatterns() {
 
 	for (auto const &kv : cfg_.chunk_transitions) {
 		auto &patterns = tracks[kv.first.first].dyn_patterns_[kv.first.second];
-		string prefix = ss(kv.first.first, "->", kv.first.second, ": ");
+		string prefix = ss(kv.first.first, "->", kv.first.second);
 		patterns = offsToPatterns(kv.second, prefix);
 	}
 
