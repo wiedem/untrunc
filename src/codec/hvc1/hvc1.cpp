@@ -48,10 +48,10 @@ Hvc1LenResult hvc1GetLengths(const uchar *start, uint maxlength, SampleSizeStats
 			seen_slice = true;
 		} else
 			switch (nal_info.nal_type_) {
-			case NAL_AUD: // Access unit delimiter
+			case H265_NAL_AUD: // Access unit delimiter
 				if (!previous_nal.is_ok) break;
 				return r;
-			case NAL_FILLER_DATA:
+			case H265_NAL_FILLER_DATA:
 				if (g_options.log_mode >= V) {
 					logg(V, "found filler data: ");
 					printBuffer(pos, 30);

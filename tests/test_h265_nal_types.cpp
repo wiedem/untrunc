@@ -57,7 +57,8 @@ void test_h265_nal_types() {
 	}
 
 	// Non-VCL parameter set and control types (32+)
-	for (int t : {32, 33, 34, (int)NAL_AUD, (int)NAL_EOB_NUT, (int)NAL_FILLER_DATA}) {
+	for (int t : {(int)H265_NAL_VPS, (int)H265_NAL_SPS, (int)H265_NAL_PPS, (int)H265_NAL_AUD, (int)NAL_EOB_NUT,
+	              (int)H265_NAL_FILLER_DATA}) {
 		CHECK(!h265IsSlice(t));
 		CHECK(!h265IsKeyframe(t));
 	}

@@ -68,6 +68,7 @@ struct Options {
 	bool fast_assert = false;
 	bool no_ctts = false;
 	bool no_edts = false;
+	int verify_compat_mb = 0; // 0 = disabled; N = scan limit in MB for --verify-compat
 	int64_t range_start = kRangeUnset;
 	int64_t range_end = kRangeUnset;
 	std::string dst_path;

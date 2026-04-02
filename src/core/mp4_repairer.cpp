@@ -8,9 +8,14 @@ extern "C" {
 #include <libavcodec/avcodec.h>
 }
 
+#include <cstring>
+
 #include "mp4_repairer.h"
 #include "rsv.h" // isPointingAtRtmdHeader, RsvRepairer
 #include "codec/avc1/avc-config.h"
+#include "codec/avc1/nal.h"
+#include "codec/hvc1/hvc-config.h"
+#include "codec/hvc1/nal.h"
 
 using namespace std;
 
@@ -164,6 +169,104 @@ bool Mp4Repairer::tryAll(off_t &offset) {
 	return false;
 }
 
+std::optional<std::pair<int, int>> Mp4Repairer::findIdrInAvcc(const uchar *data, int size, int nal_length_size) {
+	// Mdat is interleaved: audio chunks precede the first video chunk, and video
+	// access units may start with SEI NALs before the IDR slice. Strategy:
+	//   - Skip bytes one at a time when the current position does not look like a
+	//     valid AVCC NAL start (audio data, misaligned windows).
+	//   - When a valid, known H.264 NAL type is found, advance by its full length
+	//     to maintain AVCC alignment (so the SEI before the IDR is skipped cleanly).
+	//   - For unknown NAL types (audio bytes that happen to parse as valid NAL headers),
+	//     advance only 1 byte to avoid jumping past the real IDR.
+	int offset = 0;
+	while (offset + nal_length_size < size) {
+		if (nal_length_size == 4 && data[offset] != 0) {
+			offset++;
+			continue;
+		}
+		NalInfo nal(data + offset, size - offset, nal_length_size);
+		if (!nal.is_ok || (int)nal.length_ <= 0) {
+			offset++;
+			continue;
+		}
+		if (nal.nal_type_ == NAL_IDR_SLICE) return std::make_pair(offset, (int)nal.length_);
+		// Standard H.264 NAL types 1-13 and 19: trusted, advance by full NAL length.
+		// Unknown types (audio data misparsed as NAL): advance 1 byte only.
+		bool known_type = (nal.nal_type_ >= 1 && nal.nal_type_ <= 13) || nal.nal_type_ == 19;
+		offset += known_type ? (int)nal.length_ : 1;
+	}
+	return std::nullopt;
+}
+
+std::optional<std::pair<int, int>> Mp4Repairer::findIdrInHvcc(const uchar *data, int size, int nal_length_size) {
+	// Same two-tier strategy as findIdrInAvcc, adapted for H.265 two-byte NAL headers.
+	// H265NalInfo validates the forbidden_zero_bit, nal_type (0-40), and temporal_id,
+	// which makes false positives from audio data rare. All passing non-IDR NALs (VPS,
+	// SPS, PPS, SEI, non-IRAP slices) advance by full length; bytes that fail parsing
+	// advance one byte at a time.
+	int offset = 0;
+	while (offset + nal_length_size < size) {
+		if (nal_length_size == 4 && data[offset] != 0) {
+			offset++;
+			continue;
+		}
+		H265NalInfo nal(data + offset, size - offset, nal_length_size);
+		if (!nal.is_ok || (int)nal.length_ <= 0) {
+			offset++;
+			continue;
+		}
+		if (nal.nal_type_ == NAL_IDR_W_RADL || nal.nal_type_ == NAL_IDR_N_LP)
+			return std::make_pair(offset, (int)nal.length_);
+		// All valid H.265 NAL types (0-40) advance by full length.
+		offset += (int)nal.length_;
+	}
+	return std::nullopt;
+}
+
+std::optional<std::pair<int, int>> Mp4Repairer::findSpsInHvcc(const uchar *data, int size, int nal_length_size) {
+	// Per ISO 14496-15, hev1 streams may carry parameter sets in-band in the mdat.
+	// Use the same two-tier scan strategy as findIdrInHvcc: skip invalid positions
+	// byte-by-byte, advance by full NAL length for valid H.265 NALs.
+	// Stop at the first slice NAL: parameter sets must precede slices in each access unit.
+	int offset = 0;
+	while (offset + nal_length_size < size) {
+		if (nal_length_size == 4 && data[offset] != 0) {
+			offset++;
+			continue;
+		}
+		H265NalInfo nal(data + offset, size - offset, nal_length_size);
+		if (!nal.is_ok || (int)nal.length_ <= 0) {
+			offset++;
+			continue;
+		}
+		if (nal.nal_type_ == H265_NAL_SPS) return std::make_pair(offset, (int)nal.length_);
+		if (h265IsSlice(nal.nal_type_)) break;
+		offset += (int)nal.length_;
+	}
+	return std::nullopt;
+}
+
+std::optional<std::pair<int, int>> Mp4Repairer::parseSpsH265ProfileLevel(const uchar *nal, int nal_bytes) {
+	// H.265 SPS RBSP layout (after the 2-byte NAL header):
+	//   byte 0: sps_video_parameter_set_id(4)+sps_max_sublayers_minus1(3)+sps_temporal_id_nesting(1)
+	//   byte 1: general_profile_space(2)+general_tier_flag(1)+general_profile_idc(5)
+	//   bytes 2-5: general_profile_compatibility_flags
+	//   bytes 6-11: constraint flags
+	//   byte 12: general_level_idc
+	// Emulation prevention bytes (00 00 03 -> 00 00) are stripped before reading fixed positions.
+	if (nal_bytes < 15) return std::nullopt;
+	constexpr int kRbspNeeded = 13;
+	uint8_t rbsp[kRbspNeeded];
+	int n = 0;
+	for (int i = 2; i < nal_bytes && n < kRbspNeeded; i++) {
+		if (n >= 2 && rbsp[n - 2] == 0 && rbsp[n - 1] == 0 && nal[i] == 0x03 && i + 1 < nal_bytes && nal[i + 1] <= 0x03)
+			continue; // skip emulation prevention byte
+		rbsp[n++] = nal[i];
+	}
+	if (n < kRbspNeeded) return std::nullopt;
+	return std::make_pair(rbsp[1] & 0x1F, (int)rbsp[12]);
+}
+
 std::vector<int> Mp4Repairer::collectLikelySizes(const std::vector<int> &sizes, double min_freq) {
 	if (sizes.empty()) return {};
 	map<int, int> freq;
@@ -289,6 +392,16 @@ static std::string fmtH264Level(int level_idc) {
 	return "L" + std::to_string(level_idc / 10) + "." + std::to_string(level_idc % 10);
 }
 
+static std::string fmtH265Profile(int profile_idc) {
+	const char *name = avcodec_profile_name(AV_CODEC_ID_HEVC, profile_idc);
+	return name ? name : std::to_string(profile_idc);
+}
+
+static std::string fmtH265Level(int level_idc) {
+	// H.265 level_idc = level * 30 (e.g. 93 = L3.1, 120 = L4.0, 150 = L5.0)
+	return "L" + std::to_string(level_idc / 30) + "." + std::to_string((level_idc % 30) / 3);
+}
+
 void Mp4Repairer::checkRefCompatibility() {
 	for (const auto &t : mp4_.tracks_) {
 		if (t.codec_.name_ != "avc1") continue;
@@ -331,6 +444,225 @@ void Mp4Repairer::checkRefCompatibility() {
 		logg(ET, "reference and broken file are incompatible (wrong reference file?):\n", "  reference:   ", ref_str,
 		     "\n", "  broken file: ", broken_str, "\n");
 	}
+
+	for (const auto &t : mp4_.tracks_) {
+		if (t.codec_.name_ != "hvc1" && t.codec_.name_ != "hev1") continue;
+		const HvcConfig *ref_cfg = t.codec_.hvc_config_.get();
+		if (!ref_cfg || !ref_cfg->is_ok) continue;
+
+		// Scan first 128 KB of broken file for hvcC box (same strategy as H.264 avcC scan).
+		// Works for faststart files (moov before mdat). Non-faststart files skip the check.
+		FileRead &file = *mp4_.ctx_.file_.file_;
+		int scan_limit = (int)std::min(file.length(), (off_t)(128 << 10));
+		if (scan_limit < 16) continue;
+		const uchar *data = file.getFragment(0, scan_limit);
+		if (!data) continue;
+
+		const uchar *hvcc_payload = nullptr;
+		for (int i = 0; i + 8 < scan_limit; i++) {
+			if (data[i] == 'h' && data[i + 1] == 'v' && data[i + 2] == 'c' && data[i + 3] == 'C') {
+				hvcc_payload = data + i + 4;
+				break;
+			}
+		}
+		auto broken_cfg = hvcc_payload
+		                      ? HvcConfig::fromHvcCPayload(hvcc_payload, scan_limit - (int)(hvcc_payload - data))
+		                      : std::nullopt;
+
+		if (!broken_cfg) {
+			logg(V, "checkRefCompatibility: no hvcC found in broken file\n");
+			continue;
+		}
+
+		if (broken_cfg->profile_idc == ref_cfg->profile_idc && broken_cfg->level_idc == ref_cfg->level_idc) continue;
+
+		auto *par = t.codec_.av_codec_params_;
+		string ref_res = par ? (std::to_string(par->width) + "x" + std::to_string(par->height) + " ") : "";
+		string ref_str =
+		    ref_res + "H.265 " + fmtH265Profile(ref_cfg->profile_idc) + " " + fmtH265Level(ref_cfg->level_idc);
+		string broken_str =
+		    "H.265 " + fmtH265Profile(broken_cfg->profile_idc) + " " + fmtH265Level(broken_cfg->level_idc);
+		logg(ET, "reference and broken file are incompatible (wrong reference file?):\n", "  reference:   ", ref_str,
+		     "\n", "  broken file: ", broken_str, "\n");
+	}
+}
+
+void Mp4Repairer::verifyCompatByDecode() {
+	if (!g_options.verify_compat_mb) return;
+
+	for (const auto &t : mp4_.tracks_) {
+		if (t.codec_.name_ != "avc1") continue;
+		const AvcConfig *ref_cfg = t.codec_.avc_config_.get();
+		auto *ref_par = t.codec_.av_codec_params_;
+		if (!ref_cfg || !ref_par) continue;
+
+		auto *mdat = mp4_.ctx_.file_.mdat_.get();
+		int64_t scan_limit = (int64_t)g_options.verify_compat_mb << 20;
+		int scan_bytes = (int)std::min({mdat->contentSize(), scan_limit, (int64_t)INT_MAX});
+		if (scan_bytes < ref_cfg->nal_length_size + 1) continue;
+
+		const uchar *data = mdat->getFragmentIf(0, scan_bytes);
+		if (!data) continue;
+
+		auto idr = findIdrInAvcc(data, scan_bytes, ref_cfg->nal_length_size);
+		if (!idr) {
+			logg(W, "--verify-compat: no IDR frame found in first ", g_options.verify_compat_mb,
+			     "MB of broken file -- reference compatibility not verified\n");
+			continue;
+		}
+
+		// Decode the IDR using the reference's codec parameters (SPS/PPS in extradata).
+		// If the broken file was encoded with different parameters, the decode will fail
+		// because its slice data is inconsistent with the reference's SPS.
+		const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_H264);
+		if (!codec) continue;
+		AVCodecContext *avctx = avcodec_alloc_context3(codec);
+		if (!avctx) continue;
+		if (avcodec_parameters_to_context(avctx, ref_par) < 0) {
+			avcodec_free_context(&avctx);
+			continue;
+		}
+		if (avcodec_open2(avctx, codec, nullptr) < 0) {
+			avcodec_free_context(&avctx);
+			continue;
+		}
+
+		AVPacket *pkt = av_packet_alloc();
+		if (!pkt) {
+			avcodec_free_context(&avctx);
+			continue;
+		}
+		if (av_new_packet(pkt, idr->second) < 0) {
+			av_packet_free(&pkt);
+			avcodec_free_context(&avctx);
+			continue;
+		}
+		memcpy(pkt->data, data + idr->first, idr->second);
+		pkt->flags = AV_PKT_FLAG_KEY;
+
+		// Send IDR packet, then flush. H.264 can buffer frames, so a flush is needed
+		// to ensure the decoder outputs any buffered frame.
+		bool decode_ok = false;
+		if (avcodec_send_packet(avctx, pkt) >= 0 && avcodec_send_packet(avctx, nullptr) >= 0) {
+			AVFrame *frame = av_frame_alloc();
+			if (frame) {
+				decode_ok = avcodec_receive_frame(avctx, frame) >= 0;
+				av_frame_free(&frame);
+			}
+		}
+
+		av_packet_free(&pkt);
+		avcodec_free_context(&avctx);
+
+		if (!decode_ok) {
+			string ref_str = to_string(ref_par->width) + "x" + to_string(ref_par->height) + " H.264 " +
+			                 fmtH264Profile(ref_cfg->profile_idc) + " " + fmtH264Level(ref_cfg->level_idc);
+			logg(ET, "--verify-compat: broken file is not compatible with reference\n", "  reference:    ", ref_str,
+			     "\n", "  (IDR frame decode with reference parameters failed -- wrong reference file?)\n");
+		} else {
+			logg(V, "--verify-compat: IDR decoded OK, reference appears compatible\n");
+		}
+		break; // first H.264 track verified
+	}
+
+	// H.265: two-step check.
+	//
+	// Step 1 (in-band SPS): Per ISO 14496-15, hev1 streams may carry VPS/SPS/PPS
+	//   in-band in the mdat. Many cameras (GoPro, DJI, Sony, etc.) repeat parameter
+	//   sets before each IDR frame. If found, profile_idc and level_idc are extracted
+	//   directly from the SPS RBSP and compared with the reference hvcC values.
+	//
+	// Step 2 (extended hvcC scan): fallback for files without in-band PSets. Scans the
+	//   broken file from 128 KB to verify_compat_mb, catching large faststart files
+	//   where the moov atom (containing hvcC) starts beyond checkRefCompatibility's
+	//   128 KB limit.
+	for (const auto &t : mp4_.tracks_) {
+		if (t.codec_.name_ != "hvc1" && t.codec_.name_ != "hev1") continue;
+		const HvcConfig *ref_cfg = t.codec_.hvc_config_.get();
+		auto *ref_par = t.codec_.av_codec_params_;
+		if (!ref_cfg || !ref_cfg->is_ok) continue;
+
+		int64_t scan_limit = (int64_t)g_options.verify_compat_mb << 20;
+		bool checked = false;
+
+		// Step 1: scan mdat for in-band SPS (hev1 with repeat-headers)
+		{
+			auto *mdat = mp4_.ctx_.file_.mdat_.get();
+			int scan_bytes = (int)std::min({mdat->contentSize(), scan_limit, (int64_t)INT_MAX});
+			if (scan_bytes >= ref_cfg->nal_length_size + 2) {
+				const uchar *data = mdat->getFragmentIf(0, scan_bytes);
+				auto sps_loc = data ? findSpsInHvcc(data, scan_bytes, ref_cfg->nal_length_size) : std::nullopt;
+				if (sps_loc) {
+					const uchar *nal = data + sps_loc->first + ref_cfg->nal_length_size;
+					int nal_bytes = sps_loc->second - ref_cfg->nal_length_size;
+					auto pl = parseSpsH265ProfileLevel(nal, nal_bytes);
+					if (pl) {
+						checked = true;
+						if (pl->first != ref_cfg->profile_idc || pl->second != ref_cfg->level_idc) {
+							string ref_res =
+							    ref_par ? (to_string(ref_par->width) + "x" + to_string(ref_par->height) + " ") : "";
+							string ref_str = ref_res + "H.265 " + fmtH265Profile(ref_cfg->profile_idc) + " " +
+							                 fmtH265Level(ref_cfg->level_idc);
+							string broken_str = "H.265 " + fmtH265Profile(pl->first) + " " + fmtH265Level(pl->second);
+							logg(ET, "--verify-compat: broken file is not compatible with reference:\n",
+							     "  reference:    ", ref_str, "\n", "  broken file:  ", broken_str, "\n",
+							     "  (H.265 SPS from broken file does not match reference -- wrong reference "
+							     "file?)\n");
+						} else {
+							logg(V, "--verify-compat: H.265 SPS parsed OK, reference appears compatible\n");
+						}
+					}
+				}
+			}
+		}
+
+		// Step 2: extended hvcC scan (fallback when no in-band SPS found).
+		// checkRefCompatibility() already scanned [0, kFastCheckBytes): if it found an hvcC
+		// with a mismatch it would have aborted, so we only need to search beyond that boundary.
+		if (!checked) {
+			FileRead &file = *mp4_.ctx_.file_.file_;
+			int scan_bytes = (int)std::min(file.length(), scan_limit);
+			static constexpr int kFastCheckBytes = 128 << 10;
+			if (scan_bytes > kFastCheckBytes) {
+				const uchar *data = file.getFragment(0, scan_bytes);
+				if (data) {
+					const uchar *hvcc_payload = nullptr;
+					for (int i = kFastCheckBytes; i + 8 < scan_bytes; i++) {
+						if (data[i] == 'h' && data[i + 1] == 'v' && data[i + 2] == 'c' && data[i + 3] == 'C') {
+							hvcc_payload = data + i + 4;
+							break;
+						}
+					}
+					if (!hvcc_payload) {
+						logg(V, "--verify-compat: no hvcC found beyond 128 KB in broken file\n");
+					} else {
+						auto broken_cfg =
+						    HvcConfig::fromHvcCPayload(hvcc_payload, scan_bytes - (int)(hvcc_payload - data));
+						if (broken_cfg) {
+							if (broken_cfg->profile_idc == ref_cfg->profile_idc &&
+							    broken_cfg->level_idc == ref_cfg->level_idc) {
+								logg(V, "--verify-compat: H.265 hvcC found beyond 128 KB, reference appears "
+								        "compatible\n");
+							} else {
+								auto *par = t.codec_.av_codec_params_;
+								string ref_res =
+								    par ? (to_string(par->width) + "x" + to_string(par->height) + " ") : "";
+								string ref_str = ref_res + "H.265 " + fmtH265Profile(ref_cfg->profile_idc) + " " +
+								                 fmtH265Level(ref_cfg->level_idc);
+								string broken_str = "H.265 " + fmtH265Profile(broken_cfg->profile_idc) + " " +
+								                    fmtH265Level(broken_cfg->level_idc);
+								logg(ET, "--verify-compat: broken file is not compatible with reference:\n",
+								     "  reference:    ", ref_str, "\n", "  broken file:  ", broken_str, "\n",
+								     "  (hvcC found beyond 128 KB -- wrong reference file?)\n");
+							}
+						}
+					}
+				}
+			}
+		}
+
+		break; // first H.265 track verified
+	}
 }
 
 void Mp4Repairer::repair(const string &filename) {
@@ -343,6 +675,7 @@ void Mp4Repairer::repair(const string &filename) {
 	auto mdat = setupFile(filename);
 
 	checkRefCompatibility();
+	verifyCompatByDecode();
 	precomputeAudioSampleSizes();
 
 	mp4_.duration_ = 0;

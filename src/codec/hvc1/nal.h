@@ -23,10 +23,13 @@ enum {
 	NAL_CRA_NUT = 21,
 	NAL_RSV_IRAP_22 = 22,
 	NAL_RSV_IRAP_23 = 23,
-	// Non-VCL
-	NAL_AUD = 35,
+	// Non-VCL parameter sets
+	H265_NAL_VPS = 32,
+	H265_NAL_SPS = 33,
+	H265_NAL_PPS = 34,
+	H265_NAL_AUD = 35,
 	NAL_EOB_NUT = 37,
-	NAL_FILLER_DATA = 38,
+	H265_NAL_FILLER_DATA = 38,
 };
 
 class H265NalInfo {

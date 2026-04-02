@@ -52,7 +52,21 @@ bool HvcConfig::decode(const uchar *start, int len) {
 		logg(V, "hvcC configurationVersion != 1\n");
 		return false;
 	}
+	// HEVCDecoderConfigurationRecord byte 1:
+	//   bits 7-6: general_profile_space (ignored)
+	//   bit  5:   general_tier_flag
+	//   bits 4-0: general_profile_idc
+	profile_idc = start[1] & 0x1F;
+	tier_flag = (start[1] >> 5) & 0x01;
+	level_idc = start[12]; // general_level_idc
 	nal_length_size = (start[kLengthSizeByteOffset] & 0x03) + 1;
 	logg(V, "hvcC nal_length_size: ", nal_length_size, "\n");
 	return true;
+}
+
+std::optional<HvcConfig> HvcConfig::fromHvcCPayload(const uchar *payload, int len) {
+	HvcConfig cfg;
+	cfg.is_ok = cfg.decode(payload, len);
+	if (!cfg.is_ok) return std::nullopt;
+	return cfg;
 }

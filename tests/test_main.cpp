@@ -20,6 +20,7 @@ void test_sample_stats();
 void test_repair_report();
 void test_analyze_report();
 void test_avc_config();
+void test_hvc_config();
 void test_expand_ctts();
 void test_parse_byte_str();
 
@@ -40,6 +41,7 @@ int main() {
 	test_repair_report();
 	test_analyze_report();
 	test_avc_config();
+	test_hvc_config();
 	test_expand_ctts();
 	test_parse_byte_str();
 

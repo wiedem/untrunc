@@ -69,6 +69,8 @@ int main(int argc, char *argv[]) {
 		("skip-existing", "Skip if output already exists")
 		("no-ctts", "Don't restore composition time offsets")
 		("no-edts", "Don't restore edit lists")
+		("verify-compat", "Verify reference/broken file compatibility via IDR decode (N = scan limit in MB)",
+		 cxxopts::value<int>()->implicit_value("4"), "N")
 		("max-part", "Max part size in bytes", cxxopts::value<string>())
 	;
 
@@ -147,6 +149,11 @@ int main(int argc, char *argv[]) {
 	if (result.count("skip-existing")) g_options.skip_existing = true;
 	if (result.count("no-ctts")) g_options.no_ctts = true;
 	if (result.count("no-edts")) g_options.no_edts = true;
+	if (result.count("verify-compat")) {
+		int mb = result["verify-compat"].as<int>();
+		if (mb < 1) logg(ET, "--verify-compat: value must be >= 1\n");
+		g_options.verify_compat_mb = mb;
+	}
 	if (result.count("no-interactive")) g_options.interactive = false;
 
 	if (result.count("output")) g_options.dst_path = result["output"].as<string>();
